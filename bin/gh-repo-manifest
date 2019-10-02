@@ -8,12 +8,17 @@ require 'rexml/document'
 
 options = OpenStruct.new
 options.organization = 'metanorma'
+options.include_forks = false
 
 OptionParser.new do |opts|
   opts.banner = "Usage: gh-repo-manifest [options]"
 
-  opts.on("-oORG", "--organization=ORG", "GitHub organization") do |org|
+  opts.on("-oORG", "--organization=ORG1,ORG2", "GitHub organization(s)") do |org|
     options.organization = org
+  end
+
+  opts.on("-i", "--include-fork", "Include fork repos") do |fork|
+    options.include_forks = fork
   end
 
   opts.on("-h", "--help", "Prints this help") do
@@ -40,49 +45,62 @@ default.attributes['remote'] = 'github'
 default.attributes['sync-j'] = '4'
 
 groups_matchers = {
-	'processor': /^metanorma-\w*$/,
-	'model': /^metanorma-model-/,
-	'style': /-style$/,
-	'bibitem': /\wbib$/,
-	'templates': /^mn-templates-\w/,
-	'setup': /\w-setup$/
+  'processor': /^metanorma-\w*$/,
+  'metanorma': /^metanorma-.*$/,
+  'relaton': /^relaton-.*$/,
+  'model': /^metanorma-model-/,
+  'style': /-style$/,
+  'snap': /-snap$/,
+  'brew': /^homebrew-\w+/,
+  'choco': /^chocolatey-\w+/,
+  'bibitem': /\wbib$/,
+  'templates': /^mn-templates-\w/,
+  'samples': /^mn-samples-\w/,
+  'setup': /\w-setup$/,
+  'site': /(\.com|\.org)$/,
+  'converter': /[\w\d]+2[\w\d]+/,
+  'infrastructure': /(-ci|^ci-|-registry$|scripts$)/
 }
 
 begin
-	page=1
-	repos=[]
+  page=1
+  repos=[]
 
-	loop do 
-	  uri = URI("https://api.github.com/orgs/#{options.organization}/repos?page=#{page}&per_page=100")
-	  response = Net::HTTP.get(uri)
-	  result_set = JSON.parse(response)
+  options.organization.split(',').each do |org|
+  	manifest << REXML::Comment.new(" #{org} organization ")
+  	page = 1
+    loop do 
+      uri = URI("https://api.github.com/orgs/#{org}/repos?page=#{page}&per_page=100")
+      response = Net::HTTP.get(uri)
+      result_set = JSON.parse(response)
 
-	  if !result_set.kind_of?(Array) then
-	  	manifest << REXML::Comment.new(result_set.to_json)
-	  	break
-	  end
+      if !result_set.kind_of?(Array) then
+        manifest << REXML::Comment.new(result_set.to_json)
+        break
+      end
 
-	  result_set.each do |repo|
-	    if repo['size'] > 0 then
-				project = manifest.add_element 'project'
-				project.attributes['name'] = repo['full_name']
-				project.attributes['path'] = repo['name']
+      result_set.each do |repo|
+        if repo['size'] > 0 && (options.include_forks || !repo['fork']) then
+          project = manifest.add_element 'project'
+          project.attributes['name'] = repo['full_name']
+          project.attributes['path'] = repo['name']
 
-				groups=['all']
-				groups_matchers.each do |group, regexp|
-				  groups << group if repo['name'].match(regexp)
-				end
+          groups=['all']
+          groups_matchers.each do |group, regexp|
+            groups << group if repo['name'].match(regexp)
+          end
 
-				project.attributes['groups'] = groups.join(",")
-	    end
-	  end
+          project.attributes['groups'] = groups.join(",")
+        end
+      end
 
-	  break if result_set.empty?
+      break if result_set.empty?
 
-	  page += 1
-	end
+      page += 1
+    end
+  end
 rescue Interrupt => e
-	manifest << REXML::Comment.new('interrupted with Ctrl+C, output may be incomplete')
+  manifest << REXML::Comment.new('interrupted with Ctrl+C, output may be incomplete')
 end
 
 doc.write($stdout, 2)

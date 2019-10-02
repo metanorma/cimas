@@ -29,12 +29,16 @@ Highly likelly this gem will not be published, because it's only for internal us
 
 ### Propogate changes from ci-master
 
-- `git multi -c checkout -b feature/xxx`
-- `git multi -c add -u .travis.yml appveyor.yml`
-- `git multi commit -m "Update CI configuration due to XXX feature"`
-- `git multi push --set-upstream github feature/xxx`
+- `git -C ../.. multi -c checkout -b feature/xxx`
+- `git -C ../.. multi -c add -u .travis.yml appveyor.yml`
+- `git -C ../.. multi commit -m "Update CI configuration due to XXX feature"`
+- `git -C ../.. multi push --set-upstream github feature/xxx`
 - `for hub pull-request -b master -r ronaldtse -a CAMOBAP795 --no-edit`
 - `for f in */; do if [ -d "$f/.git" ]; then cd $f; hub pull-request -b master -r ronaldtse -a CAMOBAP795 --no-edit; cd ..; fi; done`
+
+### Updating default.xml
+
+ - `bin/gh-repo-manifest -o metanorma,relaton`
 
 ## Development
 
