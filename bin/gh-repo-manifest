@@ -9,6 +9,7 @@ require 'rexml/document'
 options = OpenStruct.new
 options.organization = 'metanorma'
 options.include_forks = false
+options.include_archived = false
 
 OptionParser.new do |opts|
   opts.banner = "Usage: gh-repo-manifest [options]"
@@ -19,6 +20,10 @@ OptionParser.new do |opts|
 
   opts.on("-i", "--include-fork", "Include fork repos") do |fork|
     options.include_forks = fork
+  end
+
+  opts.on("-i", "--include-archived", "Include archived repos") do |archived|
+    options.include_archived = archived
   end
 
   opts.on("-h", "--help", "Prints this help") do
@@ -80,7 +85,10 @@ begin
       end
 
       result_set.each do |repo|
-        if repo['size'] > 0 && (options.include_forks || !repo['fork']) then
+        next if repo['fork'] && !options.include_forks
+        next if repo['archived'] && !options.include_archived
+
+        if repo['size'] > 0 then
           project = manifest.add_element 'project'
           project.attributes['name'] = repo['full_name']
           project.attributes['path'] = repo['name']
