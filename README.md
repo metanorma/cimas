@@ -30,11 +30,14 @@ These steps _need to be done once_, then you can reuse `$mn-root` for future CI 
 
 Command below need to keep your `$mn-root` up-to-date
 
-- `bin/ci-master pull -b master -c ../metanorma-build-scripts/ci-master/config -r ../` - from `ci-master` directory
+- `bin/ci-master pull -b master -c ../metanorma-build-scripts/ci-master/config -r ../` - from `$mn-root/ci-master` directory
 
 ### Propogate changes from ci-master
 
-Once you pushed your configuration updates to https://github.com/metanorma/metanorma-build-scripts you are ready to apply them for all repos
+Once you pushed your configuration updates to https://github.com/metanorma/metanorma-build-scripts you are ready to apply them for all repos:
+
+- `bin/ci-master sync -r ../ -c ../metanorma-build-scripts/ci-master/config` - from `$mn-root/ci-master` directory
+- `cd $mn-root`
 
 If you just wanna _push to `master`_ run commands below:
 
@@ -43,8 +46,6 @@ If you just wanna _push to `master`_ run commands below:
 
 If you wanna to _create PR_ for your changes run commands below:
 
-- `bin/ci-master sync -r ../ -c ../metanorma-build-scripts/ci-master/config` - from `ci-master` directory
-- `cd $mn-root`
 - `git multi -c checkout -b feature/xxx`
 - `git multi -c add -u .github`
 - `git multi commit -m "Update CI configuration due to XXX feature"`
