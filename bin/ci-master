@@ -69,6 +69,10 @@ subcommands = {
   'pull' => OptionParser.new do |opts|
     opts.banner = "Usage: ci-master pull [options]"
 
+    opts.on("-cCONFIG_DIR_PATH", "--config-path=CONFIG_DIR_PATH", "Config dir path") do |path|
+      options[:config_dir_path] = Pathname.getwd + path
+    end
+    
     opts.on("-rREPO_DIR_PATH", "--repo-path=REPO_DIR_PATH", "Repo root dir path") do |path|
       options[:repo_dir_path] = Pathname.getwd + path
     end
