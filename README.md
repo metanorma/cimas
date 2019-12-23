@@ -22,6 +22,7 @@ These steps _need to be done once_, then you can reuse `$mn-root` for future CI 
 - `cd $mn-root`
 - `repo init -u https://github.com/metanorma/metanorma-build-scripts`
 - `repo sync`
+- `git multi checkout master`
 - `echo 'metanorma-build-scripts' > .multigit_ignore`
 - `git clone https://github.com/metanorma/ci-master.git`
 - `cd ci-master`
@@ -38,6 +39,7 @@ Once you pushed your configuration updates to https://github.com/metanorma/metan
 
 - `bin/ci-master sync -r ../ -c ../metanorma-build-scripts/ci-master/config` - from `$mn-root/ci-master` directory
 - `cd $mn-root`
+
 
 If you just wanna _push to `master`_ run commands below:
 
