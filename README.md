@@ -21,20 +21,21 @@ Highly likelly this gem will not be published, because it's only for internal us
 - `repo init -u https://github.com/metanorma/metanorma-build-scripts`
 - `repo sync`
 - `echo 'metanorma-build-scripts' > .multigit_ignore`
-- `cd metanorma-build-scripts/ci-master`
+- `git clone https://github.com/metanorma/ci-master.git`
+- `cd ci-master`
 
 ### Make sure repos up-to-date
 
-- `bin/ci-master pull -b master -r ../..`
+- `bin/ci-master pull -c ../metanorma-build-scripts/ci-master/config -b master -r ../..`
 
 ### Propogate changes from ci-master
 
 - `git -C ../.. multi -c checkout -b feature/xxx`
-- `git -C ../.. multi -c add -u .travis.yml appveyor.yml`
+- `git -C ../.. multi -c add -u .github`
 - `git -C ../.. multi commit -m "Update CI configuration due to XXX feature"`
 - `git -C ../.. multi push --set-upstream github feature/xxx`
-- `for hub pull-request -b master -r ronaldtse -a CAMOBAP795 --no-edit`
-- `for f in */; do if [ -d "$f/.git" ]; then cd $f; hub pull-request -b master -r ronaldtse -a CAMOBAP795 --no-edit; cd ..; fi; done`
+- `for hub pull-request -b master -r ronaldtse -a $GITHUBUSER_NAME --no-edit`
+- `for f in */; do if [ -d "$f/.git" ]; then cd $f; hub pull-request -b master -r ronaldtse -a $GITHUBUSER_NAME --no-edit; cd ..; fi; done`
 
 ### Updating default.xml
 
