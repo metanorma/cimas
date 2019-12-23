@@ -16,8 +16,8 @@ Highly likelly this gem will not be published, because it's only for internal us
 
 ### Checkout all repos
 
-- `mkdir mn-root`
-- `cd mn-root`
+- `mkdir $mn-root`
+- `cd $mn-root`
 - `repo init -u https://github.com/metanorma/metanorma-build-scripts`
 - `repo sync`
 - `echo 'metanorma-build-scripts' > .multigit_ignore`
@@ -26,20 +26,25 @@ Highly likelly this gem will not be published, because it's only for internal us
 
 ### Make sure repos up-to-date
 
-- `bin/ci-master pull -c ../metanorma-build-scripts/ci-master/config -b master -r ../..`
+- `bin/ci-master pull -b master -r ../` - from `ci-master` directory
 
 ### Propogate changes from ci-master
 
-- `git -C ../.. multi -c checkout -b feature/xxx`
-- `git -C ../.. multi -c add -u .github`
-- `git -C ../.. multi commit -m "Update CI configuration due to XXX feature"`
-- `git -C ../.. multi push --set-upstream github feature/xxx`
-- `for hub pull-request -b master -r ronaldtse -a $GITHUBUSER_NAME --no-edit`
+- `bin/ci-master sync -r ../ -c ../metanorma-build-scripts/ci-master/config` - from `ci-master` directory
+- `cd $mn-root`
+- `git multi -c checkout -b feature/xxx`
+- `git multi -c add -u .github`
+- `git multi commit -m "Update CI configuration due to XXX feature"`
+- `git multi push --set-upstream github feature/xxx`
 - `for f in */; do if [ -d "$f/.git" ]; then cd $f; hub pull-request -b master -r ronaldtse -a $GITHUBUSER_NAME --no-edit; cd ..; fi; done`
 
 ### Updating default.xml
 
+From time to time we are renaming or adding new repos this is why we need to update it from time to time
+
  - `bin/gh-repo-manifest -o metanorma,relaton`
+ 
+### Updaing specific groups
 
 ## Development
 
