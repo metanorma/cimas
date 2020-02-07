@@ -1,12 +1,28 @@
 # Ci::Master
 
-Main propose of this gem to manage CI configuration accross all repos in [metanorma organization](https://github.com/metanorma)
+## Why?
+
+In [metanorma](http://github.com/metanorma) and [relaton](http://github.com/relaton) GitHub organization there is a lot of repositories use the same CI configuration. It becomes really annoying and error-prone when we need to update CI configuration, for instance, to add new ruby version to the test matrix.
+
+In theory, this problem easily can be solved if we can refer CI configuration (or part of the configuration) outside of the repository
+
+But most of CI solutions don't support external configuration (i.e. Travis, GitHub Actions, Appveyor)
+
+Namely for GitHub:
+ - https://github.community/t5/GitHub-Actions/External-workflow-configuration/td-p/33529
+ - https://github.community/t5/GitHub-Actions/Call-an-action-from-another-action/td-p/45034
+
+## Solution
+
+Here is our soltion comes: main propose of this gem to propogate CI configuration accross all repos in [metanorma organization](https://github.com/metanorma)
 
 ## Installation
 
 Highly likelly this gem will not be published, because it's only for internal usage
 
 ### Prerequisites
+
+`ci-master` tool rely on external CLI tools below:
 
 - [`repo`](https://source.android.com/setup/build/downloading#installing-repo)
 - `pip install git-plus`
@@ -31,6 +47,7 @@ These steps _need to be done once_, then you can reuse `$mn-root` for future CI 
 
 Command below need to keep your `$mn-root` up-to-date
 
+- `repo sync`
 - `bin/ci-master pull -b master -c ../metanorma-build-scripts/ci-master/config -r ../` - from `$mn-root/ci-master` directory
 
 ### Propogate changes from ci-master
@@ -39,7 +56,6 @@ Once you pushed your configuration updates to https://github.com/metanorma/metan
 
 - `bin/ci-master sync -r ../ -c ../metanorma-build-scripts/ci-master/config` - from `$mn-root/ci-master` directory
 - `cd $mn-root`
-
 
 If you just wanna _push to `master`_ run commands below:
 
