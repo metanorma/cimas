@@ -89,13 +89,14 @@ begin
         next if repo['archived'] && !options.include_archived
 
         if repo['size'] > 0 then
+          repo_name = repo['name']
           project = manifest.add_element 'project'
           project.attributes['name'] = repo['full_name']
-          project.attributes['path'] = repo['name']
+          project.attributes['path'] = repo_name
 
-          groups=['all']
+          groups=['all', repo_name]
           groups_matchers.each do |group, regexp|
-            groups << group if repo['name'].match(regexp)
+            groups << group if repo_name.match(regexp)
           end
 
           project.attributes['groups'] = groups.join(",")
