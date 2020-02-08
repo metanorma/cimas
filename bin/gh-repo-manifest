@@ -42,7 +42,7 @@ manifest = doc.add_element 'manifest'
 
 remote = manifest.add_element 'remote'
 remote.attributes['name'] = 'github'
-remote.attributes['fetch'] = 'git://github.com'
+remote.attributes['fetch'] = 'ssh://git@github.com'
 
 default = manifest.add_element 'default'
 default.attributes['revision'] = 'master'
