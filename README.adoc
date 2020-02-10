@@ -48,6 +48,7 @@ gem install cimas
 Or, by specifying it in your `Gemfile` if you're using Bundler.
 
 
+
 == Concepts
 
 CI configuration file:: file to configure CI behavior of a repository
@@ -57,8 +58,35 @@ Cimas working area:: local directory where Cimas works within
 Cimas managed repository:: repository with CI configuration managed by Cimas
 
 
+== Demonstration
+
+The https://github.com/metanorma/metanorma-build-scripts[`metanorma-build-scripts`]
+repository contains Cimas configuration under `cimas-config/`
+for the https://github.com/metanorma[Metanorma] repositories.
+
+* `cimas-config/`: the CI master configuration directory
+* `cimas-config/cimas.yml`: the Cimas configuration file
+
+Have a look to see how it's being used!
+
+
+== Prerequisites
+
+=== Setting up the CI configuration master directory
+
+You need to first create a "`CI configuration master directory`" to
+contain master files for CI configuration.
+It is advisable to store the directory in Git for better version management.
+
+For example, with https://github.com/metanorma[Metanorma] repositories,
+the CI master configuration directory is placed in the
+https://github.com/metanorma/metanorma-build-scripts[`metanorma-build-scripts`]
+repository under `cimas-config/`.
+
+
 
 == Usage
+
 
 === Command line
 
@@ -414,46 +442,6 @@ groups:
   - metanorma-model-gb
   - metanorma-model-standoc
 ----
-
-
-=== Setting up the CI configuration master directory
-
-You need to first create the "`CIM configuration directory`".
-
-Typically you'd create one in Git for better version management.
-
-For example, with https://github.com/metanorma[Metanorma] repositories,
-the CIM configuration directory is placed in the https://github.com/metanorma/metanorma-build-scripts[`metanorma-build-scripts`]
-repository.
-
-
-=== Setting up the local CIM working area
-
-CIM requires a local working area to work with managed repositories,
-using Git's pull and push functionalities.
-
-This only _needs to be done once_ (locally), then you can reuse
-this working area for future CI configuration updates.
-
-// `$mn-root`
-
-You need to create the CIM working area
-
-Checkout all repositories
-
-[source,sh]
-----
-# suppose the CIM working area is called $CIM_CONFIG_WD
-mkdir $CIM_CONFIG_WD
-cd $CIM_CONFIG_WD
-repo init -u $CIM_CONFIG_REPO
-repo sync
-git multi checkout master
-echo 'metanorma-build-scripts' > .multigit_ignore
-git clone https://github.com/metanorma/cimas.git
-cd cimas
-----
-
 
 
 
