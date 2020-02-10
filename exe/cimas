@@ -1,0 +1,208 @@
+#!/usr/bin/env ruby
+
+require 'pathname'
+require 'optparse'
+
+require_relative '../lib/cimas/cli/command'
+
+options = {
+  'repos_path' => Pathname.getwd + 'repos',
+  'config_file_path' => Pathname.getwd + 'ci.yml',
+  'config_master_path' => Pathname.getwd + 'config'
+}
+
+top_help = <<HELP
+Commonly used command are:
+   sync :     do update ci configurations for all repos described in config
+   #lint :     do lint for ci configurations
+   pull :     do pull for repos
+   push :     do push changes to repote server
+   open-prs : do PR for Github with hub utility
+See 'cimas COMMAND --help' for more information on a specific command.
+HELP
+
+def validate_config_path(config_path)
+  if config_path.nil? || !config_path.exist?
+    raise OptionParser::MissingArgument, "-c/--config-path path is not set or does not exist"
+  end
+
+  config_path
+end
+
+global = OptionParser.new do |opts|
+  opts.banner = "Usage: cimas [options] [subcommand [options]]"
+  opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
+    options['verbose'] = v
+  end
+  opts.on("-d", "--dry-run", "Run verbosely") do |v|
+    options['dry_run'] = v
+  end
+  opts.separator ""
+  opts.separator top_help
+end
+
+subcommands = {
+  'setup' => OptionParser.new do |opts|
+    opts.banner = "Usage: cimas setup [options]"
+
+    opts.on("-r REPOS_PATH", "--repo-path=REPOS_PATH", "Repo root dir path") do |path|
+      options['repos_path'] = Pathname.getwd + path
+    end
+
+    opts.on("-f CONFIG_FILE_PATH", "--config-path=CONFIG_FILE_PATH", "Config file path") do |path|
+      options['config_file_path'] = validate_config_path(Pathname.getwd + path)
+    end
+  end,
+  'sync' => OptionParser.new do |opts|
+    opts.banner = "Usage: cimas sync [options]"
+
+    opts.on("-r REPOS_PATH", "--repo-path=REPOS_PATH", "Repo root dir path") do |path|
+      options['repos_path'] = Pathname.getwd + path
+    end
+
+    opts.on("-f CONFIG_FILE_PATH", "--config-path=CONFIG_FILE_PATH", "Config file path") do |path|
+      options['config_file_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-d CONFIG_MASTER_DIR_PATH", "--master-path=CONFIG_MASTER_DIR_PATH", "Config master path") do |path|
+      options['config_master_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
+      options['groups'] = groups
+    end
+  end,
+  'diff' => OptionParser.new do |opts|
+    opts.banner = "Usage: cimas diff [options]"
+
+    opts.on("-r REPOS_PATH", "--repo-path=REPOS_PATH", "Repo root dir path") do |path|
+      options['repos_path'] = Pathname.getwd + path
+    end
+
+    opts.on("-f CONFIG_FILE_PATH", "--config-path=CONFIG_FILE_PATH", "Config file path") do |path|
+      options['config_file_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-d CONFIG_MASTER_DIR_PATH", "--master-path=CONFIG_MASTER_DIR_PATH", "Config master path") do |path|
+      options['config_master_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
+      options['groups'] = groups
+    end
+  end,
+  'lint' => OptionParser.new do |opts|
+    opts.banner = "Usage: cimas lint [options]"
+
+    opts.on("-f CONFIG_FILE_PATH", "--config-path=CONFIG_FILE_PATH", "Config file path") do |path|
+      options['config_file_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-d CONFIG_MASTER_DIR_PATH", "--master-path=CONFIG_MASTER_DIR_PATH", "Config master path") do |path|
+      options['config_master_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-a", "--appveyor-bearer=APPVEYOR_BEARER", "Appveyor API Bearer token") do |token|
+      options['appveyor_token'] = token
+    end
+    opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
+      options['groups'] = groups
+    end
+  end,
+  'pull' => OptionParser.new do |opts|
+    opts.banner = "Usage: cimas pull [options]"
+
+    opts.on("-r REPOS_PATH", "--repo-path=REPOS_PATH", "Repo root dir path") do |path|
+      options['repos_path'] = Pathname.getwd + path
+    end
+
+    opts.on("-f CONFIG_FILE_PATH", "--config-path=CONFIG_FILE_PATH", "Config file path") do |path|
+      options['config_file_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-b BRANCH", "--pull-branch=BRANCH", "Branch to pull in all repos") do |branch|
+      options['pull_branch'] = branch
+    end
+
+    opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
+      options['groups'] = groups
+    end
+  end,
+  'push' => OptionParser.new do |opts|
+    opts.banner = "Usage: cimas push [options]"
+
+    opts.on("-r REPOS_PATH", "--repo-path=REPOS_PATH", "Repo root dir path") do |path|
+      options['repos_path'] = Pathname.getwd + path
+    end
+
+    opts.on("-f CONFIG_FILE_PATH", "--config-path=CONFIG_FILE_PATH", "Config file path") do |path|
+      options['config_file_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-b BRANCH", "--push-branch=BRANCH", "Branch to push in all repos") do |branch|
+      options['push_to_branch'] = branch
+    end
+
+    opts.on("-m MESSAGE", "--message=MESSAGE", "Commit message") do |message|
+      options['commit_message'] = message
+    end
+
+    opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
+      options['groups'] = groups
+    end
+    # TODO: implement
+    # opts.on("--force", "Force push (with commit amend)") do |force|
+    #   options['force_push'] = force
+    # end
+  end,
+  'open-prs' => OptionParser.new do |opts|
+    opts.banner = "Usage: cimas open-pr [options]"
+
+    opts.on("-r REPOS_PATH", "--repo-path=REPOS_PATH", "Repo root dir path") do |path|
+      options['repos_path'] = Pathname.getwd + path
+    end
+
+    opts.on("-f CONFIG_FILE_PATH", "--config-path=CONFIG_FILE_PATH", "Config file path") do |path|
+      options['config_file_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-w REVIEWERS", "--reviewers=REVIEWERS", "A comma-separated list (no spaces around the comma) of GitHub handles to request a review from") do |reviewers|
+      options['reviewers'] = reviewers
+    end
+
+    opts.on("-b BRANCH", "--merge-branch=BRANCH", "PR branch to merge into target") do |branch|
+      options['merge_branch'] = branch
+    end
+
+    opts.on("-m MESSAGE", "--message=MESSAGE", "Commit message") do |message|
+      options['pr_message'] = message
+    end
+
+    opts.on("-a ASSIGNMENTS", "--assign=ASSIGNMENTS", "A comma-separated list (no spaces around the comma) of GitHub handles to assign to this pull request.") do |assignees|
+      options['assignees'] = assignees
+    end
+
+    opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
+      options['groups'] = groups
+    end
+  end
+}
+
+global.order!
+command = ARGV.shift
+
+if command.nil?
+  command = 'sync'
+end
+
+subcommands[command].order!
+
+begin
+  dispatch = Cimas::Cli::Command.new(options)
+  dispatch.send(command.gsub('-', '_'))
+  exit 0
+rescue => e
+  puts "Error: #{e.message}"
+  puts e.backtrace
+  exit 1
+end

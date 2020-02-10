@@ -1,6 +1,6 @@
-RSpec.describe Ci::Master do
+RSpec.describe Cimas do
   it "has a version number" do
-    expect(Ci::Master::VERSION).not_to be nil
+    expect(Cimas::VERSION).not_to be nil
   end
 
   it "does something useful" do
