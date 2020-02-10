@@ -1,0 +1,467 @@
+= Cimas ("`Continuous integration master`")
+
+== Purpose
+
+Cimas handles synchronizing CI configuration across multiple repositories.
+
+When there are many repositories that need to share identical or similar
+CI (continuous integration) configuration, it is not only cumbersome
+but error prone to keep these configuration files in sync.
+
+For example, adding new value to the CI test matrix for multiple repositories
+should not itself be a chore.
+
+NOTE: This problem can technically be mitigated if we can externalize and
+consolidate CI configuration outside of data repositories.
+However, most CI solutions don't support external configuration
+(i.e. Travis, GitHub Actions, Appveyor). For GitHub, see:
+https://github.community/t5/GitHub-Actions/External-workflow-configuration/td-p/33529[GHA external workflow],
+https://github.community/t5/GitHub-Actions/Call-an-action-from-another-action/td-p/45034[GHA calling another action]
+
+
+== History
+
+Cimas was built to synchronize CI configuration across the
+the http://github.com/metanorma[Metanorma] and
+http://github.com/relaton[Relaton] repositories.
+
+We had a hard time managing them individually!
+
+
+== Installation
+
+Cimas (and its CLI command, `cimas`) relies on Git.
+Please ensure `git` is installed on your system.
+
+Installing is as easy as:
+
+[source,sh]
+----
+gem install cimas
+----
+
+Or, by specifying it in your `Gemfile` if you're using Bundler.
+
+
+== Concepts
+
+CI configuration file:: file to configure CI behavior of a repository
+CI configuration master file:: CI configuration file that applies to one or more target repositories
+CI configuration master directory:: directory (or a repo) where master CI configuration files reside
+Cimas working area:: local directory where Cimas works within
+Cimas managed repository:: repository with CI configuration managed by Cimas
+
+
+
+== Usage
+
+=== Command line
+
+Cimas works through the `cimas` executable. `cimas` provides the following sub-commands.
+
+* `setup`
+* `sync`
+* `diff`
+* `push`
+* `pull`
+* `open-prs`
+* `lint` (disabled right now)
+
+
+==== Sub-command options
+
+These options work across all sub-commands:
+
+* `-d` or `--dry-run`: Does not perform any destructive behavior.
+* `-v` (disabled for now)
+
+
+==== `cimas setup`
+
+The `setup` sub-command sets up the Cimas working area/directory with
+Git repos cloned as described in your Cimas configuration file
+(default: `cimas.yml`).
+
+This command must be run before any other sub-commands are run,
+and must be run when the repository addresses change
+within the Cimas configuration file (it will prompt you).
+
+[source,sh]
+----
+cimas setup -f {cimas-config-file} -r {cimas-working-area}
+
+# e.g.
+# cimas setup -f cimas.yml -r ~/src/cimas-wd
+----
+
+NOTE: This sub-command is considered "`safe`" as it does not
+alter the state of existing Git repositories within the Cimas
+working area.
+
+
+==== `cimas pull`
+
+The `pull` sub-command resets all the Git repositories to the
+original `branch` key set per-repo.
+
+This command should be run before the `cimas sync` command to
+clean up state.
+
+[source,sh]
+----
+cimas pull -f {cimas-config-file} -r {cimas-working-area}
+
+# e.g.
+# cimas pull -f cimas.yml -r ~/src/cimas-wd
+----
+
+NOTE: This sub-command is considered "`destructive`" as it
+resets states of all Git repositories in the Cimas working area.
+
+
+==== `cimas sync`
+
+The `sync` sub-command places the necessary CI configuration files,
+as described in the Cimas configuration file, into the desired
+repositories.
+
+After copying the files, Cimas will also stage the changed files
+to Git.
+
+This command must be run before the `cimas push` command.
+
+[source,sh]
+----
+cimas sync -f {cimas-config-file} -r {cimas-working-area} \
+  -d {cimas-master-config-dir}
+
+# e.g.
+# cimas sync -f cimas.yml -r ~/src/cimas-wd \
+#   -d ~/src/cimas-config
+----
+
+NOTE: This sub-command is considered "`destructive`" as it
+resets states of all Git repositories in the Cimas working area
+before adding CI configuration files.
+
+
+==== `cimas diff`
+
+The `diff` sub-command provides a consolidated `diff` output between
+the repositories in the Cimas working area and remote.
+This is useful prior to running the `cimas push` command.
+
+After copying the files, Cimas will also stage the changed files
+to Git.
+
+This command must be run before the `cimas push` command.
+
+[source,sh]
+----
+cimas diff -f {cimas-config-file} -r {cimas-working-area} \
+  -d {cimas-master-config-dir}
+
+# e.g.
+# cimas diff -f cimas.yml -r ~/src/cimas-wd \
+#   -d ~/src/cimas-config
+----
+
+NOTE: This sub-command is considered "`safe`" as it
+does not alter state of Git repositories.
+
+
+
+==== `cimas push`
+
+The `push` sub-command:
+
+* commits the changes made by the `sync` sub-command in a new branch;
+* pushes the new branch to the first Git remote.
+
+This command must be run before the `cimas open-prs` command
+as the branches need to be pushed before pull-requests can be
+opened against them.
+
+[source,sh]
+----
+cimas push -f {cimas-config-file} -r {cimas-working-area} \
+  -b {new-branch-for-commit} \
+  -m {commit-message} \
+
+# e.g.
+# cimas push -f cimas.yml -r ~/src/cimas-wd \
+#  -b my-new-ci-branch \
+#  -m 'My commit message' \
+#  [-g {group1,group2,...}]
+----
+
+NOTE: This sub-command is considered "`destructive`" as it
+alters the state of all Git repositories in the Cimas working area
+by adding commits and branches.
+
+
+==== `cimas open-prs`
+
+The `push` sub-command:
+
+* commits the changes made by the `sync` sub-command in a new branch;
+* pushes the new branch to the first Git remote.
+
+Since this command depends on GitHub privileged functionality,
+you must supply your GitHub Personal Access Token (PAT)
+via the `GITHUB_TOKEN` environment variable.
+
+[source,sh]
+----
+GITHUB_TOKEN=deadbeefdeadbeef; \
+cimas open-prs -f {cimas-config-file} -r {cimas-working-area} \
+  -b {new-branch-to-pr} \
+  -m {pr-message} \
+
+# e.g.
+# cimas open-prs -f cimas.yml -r ~/src/cimas-wd \
+#   -b my-new-ci-branch \
+#   -m 'My pull-request message' \
+#   [-g {group1,group2,...}]
+----
+
+NOTE: This sub-command is considered "`destructive`" as it
+alters the state of GitHub repositories by creating
+pull requests.
+
+
+== Configuration
+
+=== General
+
+Cimas relies on reading a Cimas configuration file (default: `cimas.yml`)
+that specifies:
+
+* repository settings;
+* group settings; and
+* Cimas behavior
+
+This YAML file needs to be in the following structure:
+
+[source,yaml]
+----
+---
+settings:
+  {option-key}: {option-value}
+  ...
+
+repositories:
+  {repo-name}:
+    remote: {remote-name}
+    branch: {branch-name}
+    files:
+      {CI-file-target-location}: {CI-configuration-master-file-location}
+    ...
+  ...
+
+groups:
+  {group-name}:
+    - {repo-name}
+    - ...
+----
+
+
+EXAMPLE: See metanorma/metanorma-build-scripts/cimas-config/cimas.yml for a working configuration.
+
+
+=== `settings`
+
+The `settings` object specifies run-time configuration. These options
+are merged with the command-line options, which have higher priority.
+
+Syntax:
+
+[source,yaml]
+----
+settings:
+  {option-key}: {option-value}
+  ...
+----
+
+The following options are available:
+
+* `reviewers` takes an array of GitHub user names as PR reviewers.
+  This is only relevant to the `cimas open-prs` sub-command.
+* `assignees` takes an array of GitHub user names as assignees to PRs.
+  This is only relevant to the `cimas open-prs` sub-command.
+
+
+EXAMPLE: This example comes from metanorma/metanorma-build-scripts/cimas-config/cimas.yml.
+
+[source,yaml]
+----
+settings:
+  reviewers:
+    - opoudjis
+    - ronaldtse
+----
+
+
+=== `repositories`
+
+The `repositories` object specifies all Git repositories
+that are managed by Cimas under this configuration file.
+
+For example, when the `cimas setup` command is run, all
+of these repositories will be cloned under the
+Cimas working area.
+
+Each repository is represented by a key under the
+`repositories` object.
+
+[source,yaml]
+----
+  {repo-name-1}:
+    remote: {remote-name}
+    branch: {branch-name}
+    files:
+      {CI-file-target-location-1}: {CI-configuration-master-file-location-1}
+      {CI-file-target-location-2}: {CI-configuration-master-file-location-2}
+----
+
+These attributes are mandatory for each repository:
+
+* `remote`: the remote Git location of this repository (i.e. where `git clone` can find this repository). SSH and HTTPS paths are supported. Single valued.
+* `branch`: the source branch and eventual branch to commit to (where a PR should be created against). Single valued.
+* `files`: composed of key value pairs of the "`target file location within the repository`" to the "`master file location within the configuration master directory`". Multiple files are supported.
+
+Syntax:
+
+[source,yaml]
+----
+repositories:
+  {repo-name-1}:
+    remote: {remote-name}
+    branch: {branch-name}
+    files:
+      {CI-file-target-location-1}: {CI-configuration-master-file-location-1}
+      {CI-file-target-location-2}: {CI-configuration-master-file-location-2}
+  {repo-name-2}:
+    remote: {remote-name}
+    branch: {branch-name}
+    files:
+      {CI-file-target-location-3}: {CI-configuration-master-file-location-3}
+    ...
+  ...
+----
+
+
+EXAMPLE: This example comes from metanorma/metanorma-build-scripts/cimas-config/cimas.yml.
+
+[source,yaml]
+----
+repositories:
+  metanorma-model-gb:
+    remote: ssh://git@github.com/metanorma/metanorma-model-gb
+    branch: master
+    files:
+      .github/workflows/macos.yml: gh-actions/model/macos.yml
+      .github/workflows/ubuntu.yml: gh-actions/model/ubuntu.yml
+      .github/workflows/windows.yml: gh-actions/model/windows.yml
+----
+
+=== `groups`
+
+Cimas offers "`grouping`" functionality to allow you to work with groups
+of repositories. This is useful if your repositories fall into
+different categories, e.g. repositories for Ruby code vs C code
+that have different build routines.
+
+There is a default group of `all` which applies if no group is specified.
+
+Groups under the `groups` key are collections of repository names.
+Each group is represented by a key of the group's name, with
+names of its repositories as array content.
+
+One repository may belong to multiple groups.
+Groups have no bearing on what files to synchronize; the files
+must be specified per repository in the configuration file
+under the `repositories` section.
+
+The `-g` switch in the various commands directly refer to the
+`{group-name}` specified in the configuration file.
+
+Syntax:
+
+[source,yaml]
+----
+groups:
+  {group-name-1}:
+    - {repo-name-1}
+    - {repo-name-2}
+    ...
+  ...
+----
+
+
+EXAMPLE: This example comes from metanorma/metanorma-build-scripts/cimas-config/cimas.yml.
+
+[source,yaml]
+----
+groups:
+  model:
+  - metanorma-model-iso
+  - metanorma-model-gb
+  - metanorma-model-standoc
+----
+
+
+=== Setting up the CI configuration master directory
+
+You need to first create the "`CIM configuration directory`".
+
+Typically you'd create one in Git for better version management.
+
+For example, with https://github.com/metanorma[Metanorma] repositories,
+the CIM configuration directory is placed in the https://github.com/metanorma/metanorma-build-scripts[`metanorma-build-scripts`]
+repository.
+
+
+=== Setting up the local CIM working area
+
+CIM requires a local working area to work with managed repositories,
+using Git's pull and push functionalities.
+
+This only _needs to be done once_ (locally), then you can reuse
+this working area for future CI configuration updates.
+
+// `$mn-root`
+
+You need to create the CIM working area
+
+Checkout all repositories
+
+[source,sh]
+----
+# suppose the CIM working area is called $CIM_CONFIG_WD
+mkdir $CIM_CONFIG_WD
+cd $CIM_CONFIG_WD
+repo init -u $CIM_CONFIG_REPO
+repo sync
+git multi checkout master
+echo 'metanorma-build-scripts' > .multigit_ignore
+git clone https://github.com/metanorma/cimas.git
+cd cimas
+----
+
+
+
+
+== Development
+
+After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+
+
+== Contributing
+
+Bug reports and pull requests are welcome on GitHub at https://github.com/metanorma/cimas. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the http://contributor-covenant.org[Contributor Covenant] code of conduct.
+
+
+== Code of Conduct
+
+Everyone interacting in the Cimas project’s codebases, issue trackers, chat rooms and mailing lists is expected to follow the https://github.com/metanorma/cimas/CODE_OF_CONDUCT.md[code of conduct].
