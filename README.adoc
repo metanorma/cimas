@@ -235,10 +235,11 @@ by adding commits and branches.
 
 ==== `cimas open-prs`
 
-The `push` sub-command:
+The `open-prs` sub-command:
 
-* commits the changes made by the `sync` sub-command in a new branch;
-* pushes the new branch to the first Git remote.
+* opens Pull Requests for all the specified repositories of the given branch;
+* creates Pull Request Review Requests for the created Pull Requests (if `reviewers` are set in `cimas.yaml:settings` or via the `-w` option);
+* assigns the created Pull Requests to assignees (if `assignees` are set in `cimas.yaml:settings` or via the `-a` option).
 
 Since this command depends on GitHub privileged functionality,
 you must supply your GitHub Personal Access Token (PAT)
@@ -255,6 +256,8 @@ cimas open-prs -f {cimas-config-file} -r {cimas-working-area} \
 # cimas open-prs -f cimas.yml -r ~/src/cimas-wd \
 #   -b my-new-ci-branch \
 #   -m 'My pull-request message' \
+#   [-w {reviewer1,reviewer2...}] \
+#   [-a {assignee1,assignee2...}] \
 #   [-g {group1,group2,...}]
 ----
 
