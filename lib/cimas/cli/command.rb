@@ -108,7 +108,10 @@ module Cimas
         filtered_repo_names.each do |repo_name|
 
           repo = repo_by_name(repo_name)
-          # puts "repo_name #{repo_name} #{repo.inspect}"
+          if repo.nil?
+            puts "[WARNING] #{repo_name} not configured, skipping."
+            next
+          end
 
           branch = repo['branch']
           files = repo['files']
@@ -155,7 +158,10 @@ module Cimas
         filtered_repo_names.each do |repo_name|
 
           repo = repo_by_name(repo_name)
-          # puts "repo_name #{repo_name} #{repo.inspect}"
+          if repo.nil?
+            puts "[WARNING] #{repo_name} not configured, skipping."
+            next
+          end
 
           branch = repo['branch']
           files = repo['files']
@@ -250,6 +256,11 @@ module Cimas
         filtered_repo_names.each do |repo_name|
 
           repo = repo_by_name(repo_name)
+          if repo.nil?
+            puts "[WARNING] #{repo_name} not configured, skipping."
+            next
+          end
+
           branch = repo['branch']
           files = repo['files']
 
@@ -311,6 +322,10 @@ module Cimas
 
         filtered_repo_names.each do |repo_name|
           repo = repo_by_name(repo_name)
+          if repo.nil?
+            puts "[WARNING] #{repo_name} not configured, skipping."
+            next
+          end
 
           repo_dir = File.join(repos_path, repo_name)
           unless File.exist?(repo_dir)
@@ -359,6 +374,10 @@ module Cimas
 
         filtered_repo_names.each do |repo_name|
           repo = repo_by_name(repo_name)
+          if repo.nil?
+            puts "[WARNING] #{repo_name} not configured, skipping."
+            next
+          end
 
           repo_dir = File.join(repos_path, repo_name)
           unless File.exist?(repo_dir)
