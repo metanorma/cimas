@@ -340,7 +340,7 @@ module Cimas
             g.branch(push_to_branch).checkout
             g.add(all: true)
 
-            if g.status.added.empty?
+            if g.status.changed.empty?
               puts "Skipping commit on #{repo_name}, no changes detected."
             else
               g.commit_all(commit_message)
