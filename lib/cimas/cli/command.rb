@@ -340,11 +340,18 @@ module Cimas
             g.branch(push_to_branch).checkout
             g.add(all: true)
 
-            if g.status.changed.empty?
+            if g.status.changed.empty? &&
+                g.status.added.empty? &&
+                g.status.deleted.empty?
+
               puts "Skipping commit on #{repo_name}, no changes detected."
             else
               g.commit_all(commit_message)
             end
+
+            # Still push even if there was no commit, as the remote branch
+            # may have been deleted. If the remote branch is deleted we can't
+            # make PRs in the next stage.
 
             if force_push
               # TODO implement
