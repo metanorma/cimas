@@ -1,0 +1,103 @@
+---
+settings:
+  reviewers:
+    - opoudjis
+    - ronaldtse
+
+repositories:
+  metanorma-cli:
+    remote: ssh://git@github.com/metanorma/metanorma-cli
+    branch: master
+    files:
+      .github/workflows/ubuntu.yml: gh-actions/metanorma-cli/ubuntu.yml
+      .github/workflows/macos.yml: gh-actions/master/macos.yml
+      .github/workflows/windows.yml: gh-actions/master/windows.yml
+  metanorma-model-gb:
+    remote: ssh://git@github.com/metanorma/metanorma-model-gb
+    branch: master
+    files:
+      .github/workflows/macos.yml: gh-actions/model/macos.yml
+      .github/workflows/ubuntu.yml: gh-actions/model/ubuntu.yml
+      .github/workflows/windows.yml: gh-actions/model/windows.yml
+  metanorma-model-iso:
+    remote: ssh://git@github.com/metanorma/metanorma-model-iso
+    branch: master
+    files:
+      .github/workflows/macos.yml: gh-actions/model/macos.yml
+      .github/workflows/ubuntu.yml: gh-actions/model/ubuntu.yml
+      .github/workflows/windows.yml: gh-actions/model/windows.yml
+
+groups:
+  converter:
+  - html2doc
+  - mathml2asciimath
+  - mn2pdf
+  - omml2mathml
+  - rfc2md
+  - rfc2mn
+  - tex2mn
+  - unicode2latex
+
+  processor:
+  - metanorma-cli
+
+  metanorma:
+  - metanorma
+  - metanorma-cli
+  - metanorma-model-gb
+  - metanorma-model-iso
+
+  model:
+  - metanorma-model-gb
+  - metanorma-model-iso
+
+  infrastructure:
+  - iso-ics-codes-scripts
+  - metanorma-registry
+  - metanorma-build-scripts
+  - cimas
+
+  style:
+  - csd-style
+  - csand-style
+  - gbdoc-style
+  - isodoc-style
+  - rsd-style
+  - m3d-style
+  - mpfd-style
+  - metanorma-ogc-style
+  - metanorma-nist-style
+  - metanorma-itu-style
+
+  site:
+  - asciirfc.com
+  - metanorma.com
+
+  samples:
+  - mn-samples-gb
+  - mn-samples-iec
+  - mn-samples-iso
+
+  setup:
+  - metanorma-macos-setup
+  - metanorma-windows-setup
+  - metanorma-linux-setup
+
+  choco:
+  - chocolatey-metanorma
+  - chocolatey-latexml
+
+  homebrew:
+  - homebrew-metanorma
+
+  templates:
+  - mn-templates-csd
+  - mn-templates-iec
+  - mn-templates-ietf
+  - mn-templates-iso
+  - mn-templates-itu
+  - mn-templates-ogc
+
+  snap:
+  - metanorma-snap
+  - latexml-snap
