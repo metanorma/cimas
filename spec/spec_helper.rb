@@ -1,5 +1,6 @@
 require "bundler/setup"
-require "ci/master"
+require "cimas"
+# require "ci/master"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
