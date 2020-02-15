@@ -331,6 +331,7 @@ module Cimas
 
           g = Git.open(repo_dir)
           dry_run("Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}") do
+            puts "repo.branch #{repo.branch}"
             g.checkout(repo.branch)
             g.reset(repo.branch)
             g.branch(push_to_branch).delete
@@ -419,6 +420,11 @@ module Cimas
               when /field: head\s+code: invalid/
                 puts "[WARNING] Branch #{branch} does not exist on #{github_slug}. Did you run `push`? Skipping."
                 next
+
+              when /message: No commits between/
+                puts "[WARNING] Target branch (#{repo.branch}) is on par with new branch (#{branch}). Skipping."
+                next
+
               else
                 raise e
               end
