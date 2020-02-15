@@ -2,6 +2,7 @@ require 'json'
 require 'yaml'
 require 'net/http'
 require 'git'
+require 'cimas'
 # require 'travis/client/session'
 
 module Cimas
@@ -329,11 +330,12 @@ module Cimas
           end
 
           g = Git.open(repo_dir)
-          # g.reset_hard(attribs['branch'])
-
           dry_run("Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}") do
-            g.branch(push_to_branch).checkout
+            g.checkout(repo.branch)
+            g.reset(repo.branch)
+            g.branch(push_to_branch).delete
             g.add(all: true)
+            g.branch(push_to_branch).checkout
 
             if g.status.changed.empty? &&
                 g.status.added.empty? &&
@@ -341,7 +343,8 @@ module Cimas
 
               puts "Skipping commit on #{repo_name}, no changes detected."
             else
-              g.commit_all(commit_message)
+              puts "Committing on #{repo_name}."
+              g.commit_all(commit_message)#, amend: true)
             end
 
             # Still push even if there was no commit, as the remote branch
@@ -349,10 +352,10 @@ module Cimas
             # make PRs in the next stage.
 
             if force_push
-              # TODO implement
-              raise "[ERROR] Force pushing with commit amend is not yet implemented."
+              puts "Force-pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}."
+              g.push(g.remotes.first, push_to_branch, force: true)
             else
-              puts "Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}"
+              puts "Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}."
               g.push(g.remotes.first, push_to_branch)
             end
           end

@@ -150,10 +150,10 @@ subcommands = {
     opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
       options['groups'] = groups
     end
-    # TODO: implement
-    # opts.on("--force", "Force push (with commit amend)") do |force|
-    #   options['force_push'] = force
-    # end
+
+    opts.on("--force", "Force push (with commit amend)") do |force|
+      options['force_push'] = force
+    end
   end,
   'open-prs' => OptionParser.new do |opts|
     opts.banner = "Usage: cimas open-pr [options]"
