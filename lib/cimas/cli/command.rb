@@ -2,7 +2,7 @@ require 'json'
 require 'yaml'
 require 'net/http'
 require 'git'
-require 'cimas'
+require_relative '../repository'
 # require 'travis/client/session'
 
 module Cimas
@@ -66,7 +66,7 @@ module Cimas
             puts "Git cloning #{repo_name} from #{attribs['remote']}..."
             Git.clone(attribs['remote'], repo_name, path: repos_path)
           else
-            puts "Skip cloning #{repo_name}, already exists."
+            puts "Skip cloning #{repo_name}, #{File.exist?(repo_dir)} already exists."
           end
         end
       end
@@ -100,6 +100,10 @@ module Cimas
         data['repositories']
       end
 
+      def verbose
+        config['verbose']
+      end
+
       def sync
         sanity_check
         unless config['config_master_path'].exist?
@@ -129,29 +133,27 @@ module Cimas
             puts "Syncing and staging files in #{repo_name}..."
 
             repo.files.each do |target, source|
-              # puts "file #{source} => #{target}"
               source_path = File.join(config_master_path, source)
               target_path = File.join(repos_path, repo_name, target)
-              # puts "file #{source_path} => #{target_path}"
+              puts "file #{source_path} => #{target_path}" if verbose
 
               copy_file(source_path, target_path)
-              g.add(target_path)
+              g.add(target)
             end
 
-            # Debugging to see if files have been changed
-            # g.status.changed.each do |file, status|
-            #   puts "Updated files in #{repo_name}:"
-            #   puts status.blob(:index).contents
-            # end
+            if verbose
+              # Debugging to see if files have been changed
+              g.status.changed.each do |file, status|
+                puts "Updated files in #{repo_name}:"
+                puts status.blob(:index).contents
+              end
+            end
           end
         end
       end
 
       def diff
         sanity_check
-        unless config['config_master_path'].exist?
-          raise "[ERROR] config_master_path not set, aborting."
-        end
 
         filtered_repo_names.each do |repo_name|
 
@@ -168,74 +170,17 @@ module Cimas
           end
 
           g = Git.open(repo_dir)
-          # g.checkout(branch)
-          # g.reset_hard(branch)
-          # g.clean(force: true)
-
-          # puts "Syncing files in #{repo_name}..."
-          #
-          # files.each do |target, source|
-          #   # puts "file #{source} => #{target}"
-          #   source_path = File.join(config_master_path, source)
-          #   target_path = File.join(repos_path, repo_name, target)
-          #   # puts "file #{source_path} => #{target_path}"
-          #
-          #   copy_file(source_path, target_path)
-          #   # g.add(target_path)
-          # end
 
           puts "======================= DIFF FOR #{repo_name} ========================="
           # Debugging to see if files have been changed
           diff = g.diff
           puts diff.patch
-
-          # g.status.changed.each do |file, status|
-         #    puts "Updated files in #{repo_name}:"
-         #    puts status.blob(:index).contents
-         #  end
         end
       end
-
-      # def lint(options)
-      #   config_master_path = options['config_master_path']
-      #   appveyor_token = options['appveyor_token']
-      #
-      #   config = YAML.load_file(File.join(config_master_path, 'ci.yml'))
-      #
-      #   validated = []
-      #
-      #   config['repos'].each do |_, repo_ci|
-      #     travisci, appveyor = repo_ci.values_at('.travis.yml', 'appveyor.yml')
-      #
-      #     if travisci && !validated.include?(travisci)
-      #       valid = system("travis lint #{File.join(config_master_path, travisci)}", :out => :close)
-      #       puts "#{travisci} valid: #{valid}"
-      #       validated << travisci
-      #     end
-      #
-      #     if appveyor && !validated.include?(appveyor)
-      #       uri = URI('https://ci.appveyor.com/api/projects/validate-yaml')
-      #       http = Net::HTTP.new(uri.host, uri.port)
-      #       http.use_ssl = true
-      #
-      #       req = Net::HTTP::Post.new(uri.path, {
-      #         "Content-Type" => "application/json",
-      #         "Authorization" => "Bearer #{appveyor_token}"
-      #       })
-      #       req.body = File.read(File.join(config_master_path, appveyor))
-      #
-      #       valid = http.request(req).kind_of? Net::HTTPSuccess
-      #
-      #       puts "#{appveyor} valid: #{valid}"
-      #       validated << appveyor
-      #     end
-      #   end
-      # end
 
       def filtered_repo_names
         return repositories unless config['groups']
 
-        # puts "config['groups'] #{config['groups'].inspect}"
         config['groups'].inject([]) do |acc, group|
           acc + group_repo_names(group)
         end.uniq
@@ -334,9 +279,9 @@ module Cimas
             puts "repo.branch #{repo.branch}"
             g.checkout(repo.branch)
             g.reset(repo.branch)
-            g.branch(push_to_branch).delete
-            g.add(all: true)
+            g.branch(push_to_branch).delete if g.is_branch?(push_to_branch)
             g.branch(push_to_branch).checkout
+            g.add(repo.files.keys)
 
             if g.status.changed.empty? &&
                 g.status.added.empty? &&
@@ -351,13 +296,16 @@ module Cimas
             # Still push even if there was no commit, as the remote branch
             # may have been deleted. If the remote branch is deleted we can't
             # make PRs in the next stage.
-
-            if force_push
-              puts "Force-pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}."
-              g.push(g.remotes.first, push_to_branch, force: true)
-            else
-              puts "Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}."
-              g.push(g.remotes.first, push_to_branch)
+            begin
+              if force_push
+                puts "Force-pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}."
+                g.push(g.remotes.first, push_to_branch, force: true)
+              else
+                puts "Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}."
+                g.push(g.remotes.first, push_to_branch)
+              end
+            rescue Git::GitExecuteError => ex
+              puts "An error of type #{ex.class} happened, message is #{ex.message}"
             end
           end
         end
