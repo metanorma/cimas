@@ -17,7 +17,8 @@ module Cimas
         'pull_branch' => 'master',
         'force_push' => false,
         'assignees' => [],
-        'reviewers' => []
+        'reviewers' => [],
+        'keep_changes' => false
       }
 
       def initialize(options)
@@ -126,9 +127,12 @@ module Cimas
 
           dry_run("Copying files to #{repo_name} and staging them") do
             g = Git.open(repo_dir)
-            g.checkout(repo.branch)
-            g.reset_hard(repo.branch)
-            g.clean(force: true)
+
+            unless keep_changes
+              g.checkout(repo.branch)
+              g.reset_hard(repo.branch)
+              g.clean(force: true)
+            end
 
             puts "Syncing and staging files in #{repo_name}..."
 
@@ -257,6 +261,10 @@ module Cimas
         config['force_push']
       end
 
+      def keep_changes
+        config['keep_changes']
+      end
+
       def push
         sanity_check
 
@@ -277,9 +285,11 @@ module Cimas
           g = Git.open(repo_dir)
           dry_run("Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}") do
             puts "repo.branch #{repo.branch}"
-            g.checkout(repo.branch)
-            g.reset(repo.branch)
-            g.branch(push_to_branch).delete if g.is_branch?(push_to_branch)
+            unless keep_changes
+              g.checkout(repo.branch)
+              g.reset(repo.branch)
+              g.branch(push_to_branch).delete if g.is_branch?(push_to_branch)
+            end
             g.branch(push_to_branch).checkout
             g.add(repo.files.keys)
 
@@ -473,6 +483,8 @@ module Cimas
         end
       end
 
+      def repo_sync(repo)
+      end
     end
   end
 end

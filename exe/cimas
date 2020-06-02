@@ -69,6 +69,10 @@ subcommands = {
       options['config_master_path'] = validate_config_path(Pathname.getwd + path)
     end
 
+    opts.on("-k", "--keep-changes", "Don't modify revert changes") do |enabled|
+      options['keep_changes'] = enabled
+    end
+
     opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
       options['groups'] = groups
     end
@@ -128,6 +132,10 @@ subcommands = {
 
     opts.on("-m MESSAGE", "--message=MESSAGE", "Commit message") do |message|
       options['commit_message'] = message
+    end
+
+    opts.on("-k", "--keep-changes", "Don't modify revert changes") do |enabled|
+      options['keep_changes'] = enabled
     end
 
     opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
