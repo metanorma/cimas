@@ -98,6 +98,7 @@ Cimas works through the `cimas` executable. `cimas` provides the following sub-c
 * `push`
 * `pull`
 * `open-prs`
+* `for-each`
 * `lint` (disabled right now)
 
 
@@ -175,7 +176,8 @@ cimas sync -f {cimas-config-file} -r {cimas-working-area} \
 
 NOTE: This sub-command is considered "`destructive`" as it
 resets states of all Git repositories in the Cimas working area
-before adding CI configuration files.
+before adding CI configuration files. But you can pass -k argument
+to not 'drop' state of the repo before sync
 
 
 ==== `cimas diff`
@@ -264,6 +266,24 @@ cimas open-prs -f {cimas-config-file} -r {cimas-working-area} \
 NOTE: This sub-command is considered "`destructive`" as it
 alters the state of GitHub repositories by creating
 pull requests.
+
+
+==== `cimas for-each`
+
+The `for-each` sub-command allow to execute arbitrary shell command for each repo
+
+There is no strict requirment to use this commant during CI configuration update.
+You can use it on demand, for example if some CI configuration files was removed
+
+[source,sh]
+----
+cimas sync -f {cimas-config-file} -r {cimas-working-area} \
+  -d {cimas-master-config-dir}
+
+# e.g.
+# cimas for-each -f cimas.yml -r ~/src/cimas-wd \
+#   -c "git rm .github/workflows/windows.yml"
+----
 
 
 == Configuration

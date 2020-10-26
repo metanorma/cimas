@@ -19,6 +19,7 @@ Commonly used command are:
    diff :     show diff for all repos
    push :     do push changes to repote server
    open-prs : do PR for Github with hub utility
+   for-each : run command for each repo with conditions
 See 'cimas COMMAND --help' for more information on a specific command.
 HELP
 
@@ -176,7 +177,22 @@ subcommands = {
     opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
       options['groups'] = groups
     end
-  end
+  end,
+  'for-each' => OptionParser.new do |opts|
+    opts.banner = "Usage: cimas sync [options]"
+
+    opts.on("-r REPOS_PATH", "--repo-path=REPOS_PATH", "Repo root dir path") do |path|
+      options['repos_path'] = Pathname.getwd + path
+    end
+
+    opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
+      options['groups'] = groups
+    end
+
+    opts.on("-c SHELL_CMD", "--shell-cmd=CMD", "Command to execute") do |shell_cmd|
+      options['shell_cmd'] = shell_cmd
+    end
+  end,
 }
 
 global.order!
