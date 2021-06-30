@@ -3,6 +3,7 @@ require 'yaml'
 require 'net/http'
 require 'git'
 require_relative '../repository'
+require 'octokit'
 # require 'travis/client/session'
 
 module Cimas
@@ -14,7 +15,6 @@ module Cimas
         'dry_run' => false,
         'verbose' => false,
         'groups' => ['all'],
-        'pull_branch' => 'master',
         'force_push' => false,
         'assignees' => [],
         'reviewers' => [],
@@ -218,11 +218,12 @@ module Cimas
 
           g = Git.open(repo_dir)
 
-          dry_run("Pulling from #{repo_name}...") do
-            puts "Pulling from #{repo_name}..."
-            g.reset_hard(repo.branch)
+          dry_run("Pulling from #{repo_name}/#{repo.branch}...") do
+            puts "Pulling from #{repo_name}/#{repo.branch}..."
+            g.remote("origin").fetch
+            g.reset_hard(repo.branch) rescue 'ignore'
             g.checkout(repo.branch)
-            g.pull
+            g.pull("origin", repo.branch)
           end
         end
 
@@ -296,6 +297,7 @@ module Cimas
           g = Git.open(repo_dir)
           dry_run("Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}") do
             puts "repo.branch #{repo.branch}"
+
             unless keep_changes
               g.checkout(repo.branch)
               g.reset(repo.branch)
@@ -326,7 +328,12 @@ module Cimas
                 g.push(g.remotes.first, push_to_branch)
               end
             rescue Git::GitExecuteError => ex
-              puts "An error of type #{ex.class} happened, message is #{ex.message}"
+              case ex.message
+              when /hint: Updates were rejected because the tip of your current branch is behind/
+                puts "[WARNING] branch #{push_to_branch} already exists on remote. If you wanna force push, pass --force"
+              else
+                puts "An error of type #{ex.class} happened, message is #{ex.message}"
+              end
             end
           end
         end
@@ -388,6 +395,7 @@ module Cimas
               case e.message
               when /A pull request already exists/
                 puts "[WARNING] PR already exists for #{branch}."
+                next
 
               when /field: head\s+code: invalid/
                 puts "[WARNING] Branch #{branch} does not exist on #{github_slug}. Did you run `push`? Skipping."
@@ -395,6 +403,10 @@ module Cimas
 
               when /message: No commits between/
                 puts "[WARNING] Target branch (#{repo.branch}) is on par with new branch (#{branch}). Skipping."
+                next
+
+              when /Repository was archived so is read-only/
+                puts "[WARNING] Reporitory #{branch} is readonly. Skipping."
                 next
 
               else
@@ -409,6 +421,10 @@ module Cimas
               github_branch_owner = github_slug.match(/(.*)\/.*/)[1]
               prs = github_client.pull_requests(github_slug, head: "#{github_branch_owner}:#{branch}")
               pr = prs.first
+              unless pr
+                puts "[WARNING] Failed to detect PR from GitHub for #{github_slug} repo. Skipping."
+                next 
+              end
               puts "[WARNING] Detected PR to be #{github_slug}\##{pr['number']}, continue processing."
             end
 

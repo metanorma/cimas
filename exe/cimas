@@ -36,7 +36,7 @@ global = OptionParser.new do |opts|
   opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
     options['verbose'] = v
   end
-  opts.on("-d", "--dry-run", "Run verbosely") do |v|
+  opts.on("--dry-run", "Run verbosely") do |v|
     options['dry_run'] = v
   end
   opts.separator ""
