@@ -19,7 +19,9 @@ module Cimas
         'assignees' => [],
         'reviewers' => [],
         'keep_changes' => false,
-        'add_auto_merge_label' => true
+        'add_auto_merge_label' => true,
+        'cooldown_count' => 10,
+        'cooldown_time' => 3 * 60
       }
 
       def initialize(options)
@@ -87,7 +89,7 @@ module Cimas
 
         return true if unsynced.empty?
 
-        raise "[ERROR] These repositories have not been setup, please run `setup` first: #{unsynced.inspect}"
+        warn "[ERROR] These repositories have not been setup, please run `setup` first: #{unsynced.inspect}"
       end
 
       def config_master_path
@@ -353,6 +355,10 @@ module Cimas
         message = pr_message
         assignees = config['assignees']
         reviewers = config['reviewers']
+        cooldown_count = config['cooldown_count']
+        cooldown_time = config['cooldown_time']
+
+        cooldown_counter = 0
 
         filtered_repo_names.each do |repo_name|
           repo = repo_by_name(repo_name)
@@ -467,6 +473,11 @@ module Cimas
               )
             end
 
+            cooldown_count += 1
+            if cooldown_count % cooldown_count == 0
+              puts "Cool down for #{cooldown_time}sec to not abuse GitHub API..."
+              sleep(cooldown_time)
+            end
           end
         end
       end
