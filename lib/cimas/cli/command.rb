@@ -473,8 +473,8 @@ module Cimas
               )
             end
 
-            cooldown_count += 1
-            if cooldown_count % cooldown_count == 0
+            cooldown_counter += 1
+            if cooldown_counter % cooldown_count == 0
               puts "Cool down for #{cooldown_time}sec to not abuse GitHub API..."
               sleep(cooldown_time)
             end
