@@ -147,7 +147,6 @@ module Cimas
               if source_path.end_with? ".erb"
                 template = ERB.new(File.read(source_path))
                 temp_file = Tempfile.new
-                p "repo.binding=#{repo.binding}"
                 params = OpenStruct.new(repo.binding).instance_eval { binding }
                 temp_file.puts(template.result(params))
                 temp_file.flush
