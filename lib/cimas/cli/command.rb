@@ -144,7 +144,18 @@ module Cimas
               target_path = File.join(repos_path, repo_name, target)
               puts "file #{source_path} => #{target_path}" if verbose
 
-              copy_file(source_path, target_path)
+              if source_path.end_with? ".erb"
+                template = ERB.new(File.read(source_path))
+                temp_file = Tempfile.new
+                p "repo.binding=#{repo.binding}"
+                params = OpenStruct.new(repo.binding).instance_eval { binding }
+                temp_file.puts(template.result(params))
+                temp_file.flush
+                copy_file(temp_file, target_path)
+              else
+                copy_file(source_path, target_path)
+              end
+
               g.add(target)
             end
 

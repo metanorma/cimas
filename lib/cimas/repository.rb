@@ -1,6 +1,6 @@
 module Cimas
   class Repository
-    attr_reader :name, :remote, :branch, :files
+    attr_reader :name, :remote, :branch, :files, :binding
 
     def initialize(name, attributes = {})
       init_from_attributes(name, attributes)
@@ -19,6 +19,7 @@ module Cimas
         @remote = attributes.fetch("remote", nil)
         @branch = attributes.fetch("branch", nil)
         @files = attributes.fetch("files", nil)
+        @binding = attributes.dig("template", "binding") { {} }
       end
     end
   end
