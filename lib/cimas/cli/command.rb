@@ -246,7 +246,12 @@ module Cimas
         if config['commit_message'].nil?
           raise OptionParser::MissingArgument, "Missing -m/--message value"
         end
-        config['commit_message']
+        msg = config['commit_message']
+        unless msg.include? "request-checks:"
+          # https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/about-status-checks#checks
+          msg << "\n\nrequest-checks: true"
+        end
+        msg
       end
 
       def pr_message
