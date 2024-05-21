@@ -4,6 +4,7 @@ require 'net/http'
 require 'git'
 require_relative '../repository'
 require 'octokit'
+require 'ostruct'
 # require 'travis/client/session'
 
 module Cimas
