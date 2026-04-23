@@ -158,11 +158,53 @@ module Cimas
               g.add(target)
             end
 
+            apply_patches(repo_name, repo_dir, g)
+
             if verbose
               # Debugging to see if files have been changed
               g.status.changed.each do |file, status|
                 puts "Updated files in #{repo_name}:"
                 puts status.blob(:index).contents
+              end
+            end
+          end
+        end
+      end
+
+      def patches
+        data['patches'] || {}
+      end
+
+      def apply_patches(repo_name, repo_dir, git)
+        patches.each do |patch_name, patch|
+          patch_groups = patch['groups'] || []
+          target_repo_names = patch_groups.flat_map { |g| group_repo_names(g) }.uniq
+          next unless target_repo_names.include?(repo_name)
+
+          globs = Array(patch['files'])
+          find_regex = Regexp.new(patch['find'])
+          replacement = patch['replace']
+
+          globs.each do |glob|
+            matched = Dir.glob(File.join(repo_dir, glob))
+            if matched.empty?
+              puts "[WARNING] Patch '#{patch_name}' on #{repo_name}: no files matched glob '#{glob}'."
+              next
+            end
+
+            matched.each do |file_path|
+              rel_path = file_path.sub(/\A#{Regexp.escape(repo_dir)}\/?/, '')
+              original = File.read(file_path)
+              updated = original.gsub(find_regex, replacement)
+
+              if original == updated
+                puts "[WARNING] Patch '#{patch_name}' on #{repo_name}:#{rel_path}: pattern did not match, file unchanged."
+                next
+              end
+
+              dry_run("Patching #{rel_path} in #{repo_name} (patch '#{patch_name}')") do
+                File.write(file_path, updated)
+                git.add(rel_path)
               end
             end
           end
