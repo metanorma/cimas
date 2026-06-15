@@ -5,7 +5,6 @@ require 'git'
 require_relative '../repository'
 require 'octokit'
 require 'ostruct'
-# require 'travis/client/session'
 
 module Cimas
   module Cli
@@ -356,8 +355,6 @@ module Cimas
           end
         end
 
-        # do two separate `git add` because one of it may be missing
-        # run_cmd("git -C #{repos_path} multi -c add .travis.yml", dry_run)
         # run_cmd("git -C #{repos_path} multi -c add appveyor.yml")
       end
 
