@@ -31,7 +31,7 @@ module Cimas
 
         @data = YAML.load(IO.read(options['config_file_path']))
 
-        @config = DEFAULT_CONFIG.merge(settings).merge(options)
+        @config = DEFAULT_CONFIG.merge(settings || {}).merge(options)
 
         unless repos_path.exist?
           FileUtils.mkdir_p repos_path
