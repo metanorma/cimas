@@ -440,8 +440,15 @@ module Cimas
         sanity_check
         branch = merge_branch
         message = pr_message
-        assignees = config['assignees']
-        reviewers = config['reviewers']
+        # Coerce to an Array of handles. Accepts:
+        #   - Array of strings from cimas.yml settings (the legacy shape)
+        #   - String from the `-a` / `-w` CLI flags (a single handle, OR a
+        #     comma-separated list per the option's help text)
+        # Without coercion, `-a opoudjis` reached this block as a bare String
+        # and `.join(',')` further down crashed with NoMethodError, aborting
+        # `cimas open-prs` before any PR could be created.
+        assignees = Array(config['assignees']).flat_map { |x| x.is_a?(String) ? x.split(',') : x }
+        reviewers = Array(config['reviewers']).flat_map { |x| x.is_a?(String) ? x.split(',') : x }
         cooldown_count = config['cooldown_count']
         cooldown_time = config['cooldown_time']
 
