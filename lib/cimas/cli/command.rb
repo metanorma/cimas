@@ -72,6 +72,38 @@ module Cimas
           else
             puts "Skip cloning #{repo_name}, #{repo_dir} already exists."
           end
+
+          enable_auto_delete_on_merge(repo_name, attribs['remote'])
+        end
+      end
+
+      # Enable GitHub's "Automatically delete head branches" repo setting so
+      # merged PR branches (cimas-sync waves and otherwise) are removed by
+      # GitHub natively. Idempotent — setting it on a repo where it's already
+      # true is a no-op. Token-gated: if no GitHub token is configured, skip
+      # with a warning. Permission-gated: failures (403, 404) are logged but
+      # do not abort setup, since some repos in a cimas workspace may not
+      # grant the caller admin scope.
+      def enable_auto_delete_on_merge(repo_name, remote)
+        if config['github_token'].to_s.empty?
+          # First non-tokened skip emits the explanation; subsequent ones stay quiet.
+          unless @auto_delete_warned_no_token
+            puts "[WARNING] No github_token configured; skipping auto-delete-on-merge setup for all repos."
+            @auto_delete_warned_no_token = true
+          end
+          return
+        end
+
+        slug = git_remote_to_github_name(remote)
+        begin
+          github_client.edit_repository(slug, delete_branch_on_merge: true)
+          puts "  [auto-delete-on-merge enabled] #{slug}"
+        rescue Octokit::NotFound
+          puts "  [WARNING] auto-delete-on-merge: #{slug} not found via the configured token"
+        rescue Octokit::Forbidden, Octokit::Unauthorized
+          puts "  [WARNING] auto-delete-on-merge: insufficient permissions on #{slug}"
+        rescue Octokit::Error => e
+          puts "  [WARNING] auto-delete-on-merge: #{slug} failed (#{e.class}): #{e.message}"
         end
       end
 
