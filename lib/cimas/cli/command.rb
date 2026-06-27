@@ -72,38 +72,6 @@ module Cimas
           else
             puts "Skip cloning #{repo_name}, #{repo_dir} already exists."
           end
-
-          enable_auto_delete_on_merge(repo_name, attribs['remote'])
-        end
-      end
-
-      # Enable GitHub's "Automatically delete head branches" repo setting so
-      # merged PR branches (cimas-sync waves and otherwise) are removed by
-      # GitHub natively. Idempotent — setting it on a repo where it's already
-      # true is a no-op. Token-gated: if no GitHub token is configured, skip
-      # with a warning. Permission-gated: failures (403, 404) are logged but
-      # do not abort setup, since some repos in a cimas workspace may not
-      # grant the caller admin scope.
-      def enable_auto_delete_on_merge(repo_name, remote)
-        if config['github_token'].to_s.empty?
-          # First non-tokened skip emits the explanation; subsequent ones stay quiet.
-          unless @auto_delete_warned_no_token
-            puts "[WARNING] No github_token configured; skipping auto-delete-on-merge setup for all repos."
-            @auto_delete_warned_no_token = true
-          end
-          return
-        end
-
-        slug = git_remote_to_github_name(remote)
-        begin
-          github_client.edit_repository(slug, delete_branch_on_merge: true)
-          puts "  [auto-delete-on-merge enabled] #{slug}"
-        rescue Octokit::NotFound
-          puts "  [WARNING] auto-delete-on-merge: #{slug} not found via the configured token"
-        rescue Octokit::Forbidden, Octokit::Unauthorized
-          puts "  [WARNING] auto-delete-on-merge: insufficient permissions on #{slug}"
-        rescue Octokit::Error => e
-          puts "  [WARNING] auto-delete-on-merge: #{slug} failed (#{e.class}): #{e.message}"
         end
       end
 
@@ -572,6 +540,77 @@ module Cimas
               puts "Cool down for #{cooldown_time}sec to not abuse GitHub API..."
               sleep(cooldown_time)
             end
+          end
+        end
+      end
+
+      # Per-wave local cleanup: delete the branch named by `push_to_branch`
+      # from each target repo on origin IF the corresponding PR has merged.
+      # Open PRs are left alone (their branch is still in use). Branches with
+      # no PR are deleted too (a wave that opened no PR for the repo, e.g.
+      # because cimas detected "no commits" at push time, leaves a stale
+      # branch on origin we shouldn't keep). Requires only standard `repo`
+      # scope on each target repo — no admin scope, since branch deletion
+      # against a merged PR is a push-level operation.
+      def cleanup_merged_prs
+        sanity_check
+        branch = push_to_branch
+
+        filtered_repo_names.each do |repo_name|
+          repo = repo_by_name(repo_name)
+          if repo.nil?
+            puts "[WARNING] #{repo_name} not configured, skipping."
+            next
+          end
+
+          github_slug = git_remote_to_github_name(repo.remote)
+          owner = github_slug.split('/').first
+
+          begin
+            prs = github_client.pull_requests(
+              github_slug,
+              head: "#{owner}:#{branch}",
+              state: 'all'
+            )
+          rescue Octokit::Error => e
+            puts "[ERROR] #{github_slug}: PR lookup failed (#{e.class}): #{e.message}"
+            next
+          end
+
+          pr = prs.first
+
+          if pr.nil?
+            # No PR for this branch — attempt to delete if the branch exists
+            dry_run("Delete branch #{github_slug}:#{branch} (no PR found)") do
+              begin
+                github_client.delete_branch(github_slug, branch)
+                puts "[deleted-no-pr] #{github_slug}:#{branch}"
+              rescue Octokit::UnprocessableEntity, Octokit::NotFound
+                puts "[absent] #{github_slug}:#{branch} (already deleted)"
+              rescue Octokit::Error => e
+                puts "[ERROR] #{github_slug}:#{branch} delete failed (#{e.class}): #{e.message}"
+              end
+            end
+            next
+          end
+
+          if pr.merged_at
+            dry_run("Delete branch #{github_slug}:#{branch} (PR ##{pr.number} merged)") do
+              begin
+                github_client.delete_branch(github_slug, branch)
+                puts "[deleted-merged] #{github_slug}:#{branch} (PR ##{pr.number})"
+              rescue Octokit::UnprocessableEntity, Octokit::NotFound
+                puts "[absent] #{github_slug}:#{branch} (PR ##{pr.number} merged but branch already gone)"
+              rescue Octokit::Error => e
+                puts "[ERROR] #{github_slug}:#{branch} delete failed (#{e.class}): #{e.message}"
+              end
+            end
+          elsif pr.state == 'open'
+            puts "[skip-open] #{github_slug}:#{branch} (PR ##{pr.number} still open)"
+          else
+            # Closed-without-merge — keep branch by default; closing without merge
+            # often means someone intends to revisit. Operator can clean up manually.
+            puts "[skip-closed] #{github_slug}:#{branch} (PR ##{pr.number} closed without merge)"
           end
         end
       end
