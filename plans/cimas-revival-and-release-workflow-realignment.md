@@ -1,6 +1,52 @@
 # Cimas revival and release-workflow realignment
 
-Status as of 2026-06-28. Working draft kept locally; this file is the canonical published record. Updates land as direct commits to `main` per the org's plans/ convention (no PR ceremony for plan-only commits).
+Status as of 2026-06-29. Working draft kept locally; this file is the canonical published record. Updates land as direct commits to `main` per the org's plans/ convention (no PR ceremony for plan-only commits).
+
+## Outcome — 2026-06-29: Stale bundler-cache root-cause fix; 5-week silent docker-block broken; new release→docker chain validated end-to-end for the first time
+
+Two structurally-related failures in the release chain were diagnosed and fixed tonight, and a third was retrospectively validated as actually working. Net effect: **the metanorma-cli docker chain has shipped a new image for the first time since 2026-05-16**, a ~6-week silent-failure window.
+
+**The proximate failure.** `metanorma-cli` v1.16.6 `do-release` failed twice (2026-06-27 + 2026-06-28) on `Bundler::GemNotFound: metanorma-nist`, despite the gem being a normal entry in the `Gemfile`. Locally on a maintainer's machine, the same `bundle install` succeeded. The third attempt tonight succeeded after the fix landed, with `metanorma-cli 1.16.6` now live on rubygems.
+
+**Root cause ([`metanorma/ci#314`](https://github.com/metanorma/ci/issues/314)).** `rubygems-release.yml`'s release job called `ruby/setup-ruby@v1` with `bundler-cache: true`. The cache key was a hash of `Gemfile.lock`. metanorma-org gems don't commit `Gemfile.lock`, so the cache key was unstable, and `ruby/setup-ruby` used its **restore-key fallback** to restore a cache from a previous release run that had a different Gemfile state. After the stale restore, `bundle install` only installed the diff — typically a single recently-bumped gem — leaving any newly-added gem (here `metanorma-nist`) **silently absent**. `bundle exec rake release` then failed at resolve time. The log was unambiguous: cache key `Gemfile.lock-b31809f053...` (current) vs restore-key hit `Gemfile.lock-ebde68ccbd...` (older, different) — confirmed stale restore. Only `mn2pdf 2.60` was installed post-restore; every other gem was assumed-cached. This bug was generic — it bit every gem release going through `rubygems-release.yml`, not just metanorma-cli.
+
+**Fix shipped in two PRs.**
+
+- [`metanorma/ci#315`](https://github.com/metanorma/ci/pull/315) — hardcoded `bundler-cache: false` on the release job's `ruby/setup-ruby` step; deprecated the `inputs.bundler_cache` parameter (still accepted, value ignored, default flipped to `false`). Closed `#314`.
+- [`metanorma/ci#316`](https://github.com/metanorma/ci/pull/316) — added the explicit `Fresh bundle install` step (`bundle install --jobs 4 --retry 3`) that `#315` regressed. With `bundler-cache: false`, `ruby/setup-ruby` does NOT run `bundle install` itself, and `#315` had not added a replacement step — so the release job was running `bundle exec rake release` against an empty gem set, dying in 6 seconds on the same `Bundler::GemNotFound`. Inserted the explicit step between `Remove Gemfile.lock before bump` and `Bump version`, mirroring the preflight job's structure ([`#313`](https://github.com/metanorma/ci/pull/313)).
+
+The preflight job ([`#313`](https://github.com/metanorma/ci/pull/313)) had already been using `bundler-cache: false` plus an explicit `bundle install` since it landed — that's why local `cimas release-preflight` passed in the days the live CI release was failing on the same gem set. The fix brings the release job to the same hygiene.
+
+**Why this slipped past `#315` review.** Conflated "`ruby/setup-ruby` with `bundler-cache: true` runs `bundle install` internally" with "the workflow has an `bundle install` step somewhere." It did not. The cache flag was the only install mechanism in the release job. Step-tracing the release job, or reading the preflight job closely enough to notice it has a separate `bundle install` step *for a reason*, would have caught it. Lesson banked for future setup-ruby flag changes: trace every step's source of installed gems before toggling the cache flag.
+
+**Retrospective validation of `#426` (the silent docker-dispatch bug).** [`metanorma/metanorma-cli#426`](https://github.com/metanorma/metanorma-cli/issues/426), closed 2026-06-25, had documented that every metanorma-cli release since 2026-05-16 had silently failed to trigger the downstream `metanorma-docker` rebuild. The old chain was `ruby-artifacts.yml` on `release: published` → `gh workflow run build-push.yml --field version=...` against metanorma-docker. metanorma-docker's `build-push.yml` had a bare `workflow_dispatch:` with no `inputs:` block, so the API rejected the `version` field with HTTP 422. Both dispatches failed; the docker images on Docker Hub had been ~5 versions stale.
+
+The fix was a chain rewrite: route through `peter-evans/repository-dispatch` with event-type `release-passed` from `rubygems-release.yml` itself (step 22 of the release job), receive in metanorma-docker via a new `release-tag.yml` workflow on `repository_dispatch: types: [release-tag]`, which creates the version tag in the docker repo, which then triggers `build-push.yml` and `build-push-windows.yml` on tag push. This chain was wired in `#426`'s close but never actually fired against a real release — the bundler-cache bug was blocking every release attempt that would have exercised it.
+
+Tonight was the first end-to-end test:
+
+| Time (UTC) | Event |
+|---|---|
+| 14:14:41 | metanorma-cli `do-release` repository_dispatch fired (third attempt) |
+| 14:16:27 | metanorma-cli release job completed success — `gem push` of `metanorma-cli 1.16.6` to rubygems live |
+| 14:16:27 | `Dispatch release-passed` step (rubygems-release.yml line 329) succeeded |
+| 14:18:44 | metanorma-docker `release-tag` workflow ran on repository_dispatch — created the `v1.16.6` tag |
+| 14:20:40 | metanorma-docker `build-push` and `build-push-windows` triggered on `main`-branch push — both completed success |
+| 14:20:40 | metanorma-docker `build-push` and `build-push-windows` triggered on `v1.16.6` tag push — in progress at time of writing |
+
+**Net effect.** The new release→docker chain — `rubygems-release.yml` `Dispatch release-passed` → metanorma-docker `release-tag` → tag-push → `build-push*` — is verified working end-to-end against a live release for the first time. The ~6-week silent-failure window (2026-05-16 → 2026-06-29) closed.
+
+**Structural follow-ups surfaced.**
+
+1. **The "green means published" invariant from [`#292`](https://github.com/metanorma/ci/issues/292) needs to extend to "green means downstream cascaded".** `#426` and `#314` both manifested as silent-failure classes — a release run reported success even though the desired downstream effect (docker rebuild for `#426`; `gem push` for `#314`) had not actually happened (or happened against a broken pipeline). The "green means published" invariant catches the `#314` shape (release job green but `gem push` skipped or failed mid-step); it does NOT catch the `#426` shape (release job green, dispatch step green, but receiver rejected the dispatch with HTTP 422 silently in a separate run). The invariant needs to extend to the downstream cascade as an observable: assert that the dispatched event was acknowledged downstream within a bounded time window, or fail the release run. Filed as a follow-up scope for `#302`.
+
+2. **`bundler-cache: true` on `ruby/setup-ruby` is structurally unsafe in any workflow that mutates `Gemfile.lock` mid-run.** Any future caller of `rubygems-release.yml`, or any new workflow with similar shape, should default to `bundler-cache: false` plus an explicit `bundle install` step. Worth adding as a check in the cimas master template review — when reviewing inherited workflow templates against the master, flag any `bundler-cache: true` in a workflow that also does `rm -f Gemfile.lock`.
+
+3. **An end-to-end contract test of the full release chain (the third structural observation in `#292`) would have caught both `#314` and `#426` before they shipped.** A test in `metanorma/ci`'s own CI that bumps a fake gem, publishes to a test rubygems source, emits `release-passed`, and asserts the downstream tag-push and `build-push*` runs complete, would break any change to the shared workflow that breaks the chain. Open as scope.
+
+**Linked work.** [`metanorma/ci#314`](https://github.com/metanorma/ci/issues/314) (root-cause analysis) — closed by `#315`. [`metanorma/ci#315`](https://github.com/metanorma/ci/pull/315) (hardcode `bundler-cache: false`) — merged. [`metanorma/ci#316`](https://github.com/metanorma/ci/pull/316) (add explicit `bundle install` step, regression hotfix from `#315`) — merged. [`metanorma/metanorma-cli#426`](https://github.com/metanorma/metanorma-cli/issues/426) (docker dispatch silently fails every release) — closed 2026-06-25, retrospectively validated tonight. `release-chain.md` in `metanorma/ci` updated to name the stale-cache failure mode under layer 7 and to note both `#315` and `#316` as the resolution.
+
+---
 
 ## Outcome — 2026-06-28: Public husk fix for `metanorma-nist` + `metanorma-bsi` (closing the 2019 privatisation hole)
 
