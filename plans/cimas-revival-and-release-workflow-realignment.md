@@ -272,4 +272,82 @@ Until those four hold, Phase B is paused.
 - The `master/release_wo_bundle_install.yml` variant referenced by 3 metanorma repos (metanorma, metanorma-utils, ...) — intentionally untouched by #293; can be aligned in a follow-up if needed.
 - Bug reports filed only as draft on the metanorma-cli session's incident track — held pending specific need-to-file signal. Two structural bugs in the shared rubygems-release.yml workflow have been observed (silent-green non-publish under `gated: true` + PAT; `rake release` GemNotFound on the do-release path after Gemfile.lock removal); the wrapper architecture neutralises both for metanorma-org direct-callers, so filing them is informational rather than urgent.
 
+---
+
+## Forward roadmap — cimas/ci rehabilitation arc past `#300` (recorded 2026-06-29 evening)
+
+Stocktake of remaining work beyond the 2026-06-29 escalation sweep. Roughly ordered by ripeness for daylight pickup.
+
+### 1. Near-term concrete (ready to execute, mechanical)
+
+| Item | Effort | Note |
+|---|---|---|
+| **a. `#274` pubid-narrow-wave** — 10 PRs across `pubid-bsi`, `pubid-ccsds`, `pubid-cen`, `pubid-core`, `pubid-iec`, `pubid-ieee`, `pubid-iso`, `pubid-itu`, `pubid-jis`, `pubid-nist`, `pubid-plateau` | 2 hrs | Tightest-blast-radius cluster; verifies cimas-side wave mechanics post-`#314`/`#316` |
+| **b. `#274` full wave** — the remaining 13 TODO repos: `html2doc`, `iso690render`, `metanorma`, `metanorma-cli`, `metanorma-plugin-lutaml`, `metanorma-utils`, `mn2pdf-ruby`, `mnconvert-ruby`, `niso-jats`, `reverse_adoc`, `rfcxml`, `sts-ruby` | ~1-1.5 daylight session | Same cimas-wd, second pass |
+| **c. `#274` MISSING triage** — `metanorma-plugin-datastruct`, `mn2pdf`, `mn2sts`, `rfc2md`, `stepmod2mn` | ~30 min each | Diagnose: archived? renamed? out-of-scope? |
+| **d. `#274` NOVER fix** — `csa-ccm-tools/csa-ccm.gemspec` | ~15 min | Manually add `required_ruby_version` line since the patches regex can't insert |
+
+### 2. `#302` observability — scope additions
+
+| Item | Effort | Note |
+|---|---|---|
+| Post-`gem push` rubygems-API verification step in `rubygems-release.yml` | 1-2 hrs | Catches the `#314`-class silent-fail (claimed push, gem absent from API) |
+| Post-dispatch acknowledgement poll (bounded wait for receiver workflow) | 2-3 hrs | Catches the `#426`-class silent-fail (dispatch accepted but rejected by receiver) |
+| Document "dispatch accepted" vs "dispatch acted on" distinction in `release-chain.md` | 30 min | Cheap, high-clarity-value |
+
+### 3. `#309` chain streamlining — follow-ups
+
+| Item | Effort | Note |
+|---|---|---|
+| **End-to-end contract test in `metanorma/ci`'s own CI** | **multi-day** | Highest single value-add. Would have caught both `#314` and `#426`. Test gem fixture + test downstream receiver + workflow assertions. |
+| `bundler-cache: true` + `Gemfile.lock` mutation check (cimas template audit automation) | 1-2 hrs | Forensic scan for the unsafe pattern across caller workflows |
+| Comprehensive layer-by-layer failure-mode documentation in `release-chain.md` | 3-4 hrs | Beyond the layer-7 entry already there |
+
+### 4. `#300` Gap IMPLEMENTATIONS (the big work past the docs pass)
+
+All four Gaps are documented as "proposed, not implemented" in [`metanorma/cimas:README.adoc`](https://github.com/metanorma/cimas/blob/main/README.adoc) (commits `8f1705f`, `307955d`, `9e94446`); the table below tracks the implementation effort.
+
+| Gap | Effort | Note |
+|---|---|---|
+| Gap 1 — per-repo `with:` rendering | ~4-5 hrs | Schema + renderer + ERB template + tests. **Gates Gap 2.** |
+| Gap 4 — flatten-stale cimas PRs | ~4-5 hrs full / ~1.5-2 hrs cheaper | Cheaper version skips strict-superset gate (label-and-comment all open `cimas-sync-*` PRs on new-wave-open) |
+| Gap 3 — drift-audit subcommand | ~6-8 hrs | Diff classifier + heuristics + sync-blocking semantics. Largest mechanical piece. |
+| Gap 2 — monorepo sub-template family | **multi-day**, depends on Gap 1 | Reusable-workflow extensions in `metanorma/ci` + new `gh-actions/monorepo/*` template family + `metanorma/pubid` as first migration target |
+
+### 5. Hygiene cleanup carried from the 2026-06-19 / 2026-06-24 waves
+
+| Item | Effort | Note |
+|---|---|---|
+| 25 wave-PR creation failures from the 2026-06-19 wave (core flavour gems `isodoc`/`metanorma-cli`/`metanorma-standoc`/`metanorma-bsi`/`metanorma-nist`; `mn-templates-*` cluster; tooling cluster) | half-day | Per-repo investigation; non-default base-branch + existing PR conflicts likely causes |
+| 87 wave-PR permissions amend gaps (non-master-template `release.yml` variants) | half-day | Second regex pass on each |
+| 6 *-ruby tooling repos (`emf2svg-ruby`, `mn2pdf-ruby`, `mn2sts-ruby`, `mnconvert-ruby`, `mnconvert`, `sts2mn-ruby`) needing custom one-off edits | 2-3 hrs | Non-standard `release.yml` structures |
+| 1 `atmospheric` push-failed wave PR | ~30 min | Investigate access/state |
+| Older open `metanorma/ci` tickets: [`#278`](https://github.com/metanorma/ci/issues/278) (patch-release breaking-change heuristic), [`#258`](https://github.com/metanorma/ci/issues/258) (dev deps in release), [`#210`](https://github.com/metanorma/ci/issues/210) (bundle update in flavor tests in docker container) | 1-3 hrs each | Concrete-action escalation per ticket |
+| Coradoc-style opt-outs across other repos (additional Gap 3 instances beyond `#318`) | 1-2 hrs | Audit the org for the pattern |
+
+### 6. Long-horizon / Phase B
+
+| Item | Effort | Note |
+|---|---|---|
+| Cimas Phase B refactor (autoload, OOP/MECE decomposition of `Cli::Command`, no `respond_to?`/`instance_variable_get`/`send`, YAML schemas, README expansion, specs throughout) | **multi-week** | Per the 2026-06-16 code-standards prompt. The cimas-side of the rehabilitation. |
+| Trusted Publishing OIDC migration (replacing rubygems API-key auth) | **multi-week** | Direction set in 2026-06-19 wave's `id-token: write` permissions block; not actually wired |
+| Stale public husks for archived flavour gems (`gb`, `vg`, `m3d`, `mpfa`, `m3aawg`) | 1-2 hrs | Same pattern as the 2026-06-28 `nist`/`bsi` husk fix; lower urgency since these repos are archived |
+
+### 7. Hands-off (out of scope for this plan)
+
+| Item | Note |
+|---|---|
+| `metanorma-cli#428` packed-mn dispatch chain reconstruction | Led by @ronaldtse per the standing scope boundary above |
+| `metanorma/cimas#40` rake.yml `permissions: contents: read` block | @ronaldtse-assigned (cimas template), led by him |
+
+### Working priority for the next several daylight sessions
+
+1. **Complete `#274`** (1.a → 1.b → 1.c → 1.d) — finishes the most visible drift across the stack
+2. **Prior-wave residual cleanup** (5) — gets the existing PR queue clean before adding new ones
+3. **`#302` post-`gem push` verification + post-dispatch acknowledgement** (2) — biggest observability wins per effort
+4. **Older open `metanorma/ci` tickets** `#210`/`#258`/`#278` — concrete-action progression per ticket
+5. **End-to-end contract test in `metanorma/ci` CI** (3) — biggest structural win against `#314`/`#426`-class recurrence
+6. **`#300` gap implementations** in order: Gap 4 → Gap 1 → Gap 3 → Gap 2 (last; depends on Gap 1)
+7. **Phase B / Trusted Publishing / stale husks** — longer-horizon; rides alongside the above
+
 🤖
