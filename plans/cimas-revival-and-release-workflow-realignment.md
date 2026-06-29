@@ -351,3 +351,75 @@ All four Gaps are documented as "proposed, not implemented" in [`metanorma/cimas
 7. **Phase B / Trusted Publishing / stale husks** — longer-horizon; rides alongside the above
 
 🤖
+
+---
+
+## Outcome — 2026-06-29/30: late-night wave, deprecation triage, plugins family completion, cimas bug surfacings
+
+The carryover wave (Section 1.a + 1.b of the forward roadmap above) was executed late on 2026-06-29 across the processor/tools/metanorma/plugins/model groups in `cimas-wd-2026-06-29`. Net outcome: **8 PRs created, 17 no-op (already template-current), 6 deprecation strips landed, 4 cimas bugs surfaced**.
+
+### Wave outcome — 8 PRs created
+
+Main-wave batch (4 PRs):
+
+- [`metanorma/csa-ccm-tools#38`](https://github.com/metanorma/csa-ccm-tools/pull/38)
+- [`metanorma/html2doc#104`](https://github.com/metanorma/html2doc/pull/104)
+- [`metanorma/metanorma-cli#431`](https://github.com/metanorma/metanorma-cli/pull/431)
+- [`metanorma/mn2pdf-ruby#48`](https://github.com/metanorma/mn2pdf-ruby/pull/48)
+
+Plugins batch (4 PRs — all 4 `metanorma-plugin-*` repos, including 2 newly added to cimas-config):
+
+- [`metanorma/metanorma-plugin-lutaml#285`](https://github.com/metanorma/metanorma-plugin-lutaml/pull/285)
+- [`metanorma/metanorma-plugin-glossarist#77`](https://github.com/metanorma/metanorma-plugin-glossarist/pull/77)
+- [`metanorma/metanorma-plugin-datastruct#75`](https://github.com/metanorma/metanorma-plugin-datastruct/pull/75) (first ever cimas-sync PR for it)
+- [`metanorma/metanorma-plugin-plantuml#55`](https://github.com/metanorma/metanorma-plugin-plantuml/pull/55) (first ever cimas-sync PR for it)
+
+### Wave outcome — 17 no-op (already template-current from prior waves)
+
+The 16 metanorma flavour repos (`metanorma-bipm/bsi/cc/generic/iec/ieee/ietf/iho/iso/itu/jis/nist/ogc/plateau/ribose/standoc`) plus `mn2sts-ruby` had wave branches pushed but `gh pr create` returned "No commits between main and cimas-sync-2026-06-29" — meaning their staged content was effectively identical to main. Prior waves had brought them to template-current state already. Healthy sign that the rehabilitation has been propagating across the bulk of the stack.
+
+### Deprecation triage — branches deleted + cimas-config strips
+
+Maintainer triage during the wave identified 3 obsolete metanorma flavour repos (in addition to the pubid + iso690render strips landed earlier in the slot):
+
+| Repo | Last release | Stripped via |
+|---|---|---|
+| `metanorma-csa` | 2025-09-01 (10 mo) | wave branch deleted mid-flight; cimas.yml strip in [`#323`](https://github.com/metanorma/ci/pull/323) |
+| `metanorma-m3aawg` | 2023-03-13 (3+ yrs) | same |
+| `metanorma-un` | 2024-09-30 (21 mo) | same |
+
+Combined with the earlier [`#319`](https://github.com/metanorma/ci/pull/319) (11 pubid standalones + umbrella) and [`#321`](https://github.com/metanorma/ci/pull/321) (iso690render legacy of relaton-render), the total cimas-config strip for 2026-06-29 is **15 repos**.
+
+### Plugins family completion — `metanorma-plugin-{datastruct,plantuml}` added
+
+[`#322`](https://github.com/metanorma/ci/pull/322) added the 2 missing `metanorma-plugin-*` repos to `cimas-config/cimas.yml`. Pre-existing config inconsistencies found during the audit:
+
+- `metanorma-plugin-datastruct` was in the `plugins` group but had no `repositories:` entry, causing `cimas sync` to log `not configured, skipping` on every wave.
+- `metanorma-plugin-plantuml` was absent from both.
+- `metanorma-plugin-glossarist` was in `repositories:` but missing from the `plugins` group.
+
+All four are now consistently in both `repositories:` and the `plugins` group.
+
+### Inventory — answering "what's actually in scope?"
+
+300 metanorma org repos in total, of which ~80 are active Ruby gem repos managed by cimas (64 unambiguous-Ruby + 14 metanorma flavours misclassified as HTML/Liquid by GitHub primaryLanguage + `sts-ruby`). 47 Ruby tools not in cimas (deliberately or otherwise). 19 XML schema repos. 47 templates/samples/data. 1 docs site. 1 archived (`metanorma-tutorial`). Plus the `pubid` monorepo as a Gap-2-pending case.
+
+### Cimas bugs surfaced — to be filed as `metanorma/cimas` issues
+
+Tonight's wave surfaced 4 distinct cimas bugs / limitations worth banking:
+
+1. **`cimas open-prs -m` is used as PR title, not body.** Passing a multi-line markdown PR body via `-m` causes HTTP 422 (`title is too long, max 256 chars`). Workaround: bypass `cimas open-prs` and use `gh pr create` directly.
+
+2. **`cimas sync` writes master-template workflow files onto monorepo umbrellas** despite the monorepo's local `uses: ./.github/workflows/...` pattern. Concrete instance: `metanorma/pubid` (the monorepo) got `gh-actions/master/rake.yml` written on top of its monorepo-aware local `rake.yml`, which would break its CI on merge. Hand-cleanup (wave-branch deletion) required. Closely related to [`#300`](https://github.com/metanorma/ci/issues/300) Gap 2; cimas-side detection of monorepo `uses:` shapes would prevent the auto-clobber.
+
+3. **`cimas sync` patches-regex `spec\.required_ruby_version\s*=.*` doesn't match the `s.required_ruby_version` block-variable convention.** `reverse_adoc.gemspec` uses `Gem::Specification.new do |s|` (single-char `s`) instead of `do |spec|`, so the regex skips it. Concrete one-repo edge case tonight but represents a class. Easiest fix: relax regex to `(?:spec|s)\.required_ruby_version\s*=.*`.
+
+4. **`cimas sync` patches-mode warning `pattern did not match, file unchanged` is misleading.** Fires both when the regex genuinely didn't match (no `required_ruby_version` line at all, e.g. NOVER case in `csa-ccm-tools/csa-ccm.gemspec`) AND when the regex did match but `gsub!` returned `nil` because the substitution was identical (gemspec already at target version). UX / log-message clarity issue.
+
+To be filed as one consolidated `metanorma/cimas` issue (1, 3, 4 together since they're small operational improvements; 2 is closely related to `#300` Gap 2 and can cross-reference).
+
+### Reverse_adoc — deferred
+
+`reverse_adoc.gemspec` uses the `s.` block-var convention; patches regex doesn't match. Not in tonight's wave. Two options for follow-up: (a) manually rewrite `reverse_adoc.gemspec` to use `spec.` consistently (15-line repo-style change), or (b) fix cimas Bug 3 above (regex relaxation, one-line cimas change benefiting all `s.`-style gemspecs). Option (b) is the cleaner root-cause fix. Deferred for daylight pickup.
+
+🤖
