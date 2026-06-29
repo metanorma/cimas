@@ -19,6 +19,33 @@ This scope boundary can be revisited when packed-mn work resumes; until then it 
 ---
 
 
+## Outcome — 2026-06-29 (evening): Open-issue sweep across the cimas/ci ticket queue
+
+A single session cleared or advanced six tickets in the `metanorma/ci` queue, plus filed a new design candidate and posted chain-health evidence on `metanorma-cli#428`.
+
+### Items cleared
+
+| # | Item | Resolution |
+|---|---|---|
+| 1 | [`metanorma/ci#237`](https://github.com/metanorma/ci/issues/237) — "Investigate whether to delete old fontist-setup-action workflow" | Investigation comment + [`#317`](https://github.com/metanorma/ci/pull/317) PR. Decision (Option B): **keep both** `fontist-setup` (all-in-one, used by `metanorma-cli/.github/workflows/fonts-check.yml`) and `fontist-repo-setup` (Fontist-already-installed minimal variant) — they are complementary, not redundant. Fix the wrong description on `fontist-setup` (it had a copy-pasted description from `gh-rubygems-setup-action`). Document the distinction in both `action.yml`s so future maintainers don't pick the wrong variant. The fontist toolchain is fragile enough that deletion + migration (Option A) was rejected as not worth the risk. |
+| 2 | [`metanorma/metanorma-cli#428`](https://github.com/metanorma/metanorma-cli/issues/428) — packed-mn dispatch chain | Informational comment posted with the docker-chain validation evidence from earlier today (the new `release-passed → release-tag → build-push` chain firing green for the first time against `cli` v1.16.6). Framed as chain-health context, not a request. Scope boundary recorded above (packed-mn led by @ronaldtse, hands-off from this plan's scope). |
+| 3 | [`metanorma/ci#292`](https://github.com/metanorma/ci/issues/292) — "Bringing metanorma org to release-workflow parity" | Close-as-superseded comment posted. Scope 1 (wrapper convergence) stood down 2026-06-18; scope 2 (three observability observations) rehomed to `#302` on 2026-06-24. Nothing actionable remains under `#292` itself. |
+| 4 | [`metanorma/ci#272`](https://github.com/metanorma/ci/issues/272) + [`#276`](https://github.com/metanorma/ci/issues/276) — tests-passed permissions cluster | [`PR#277`](https://github.com/metanorma/ci/pull/277) merged (`e56e2b3`) — the 2-line PAT-restore fix opened 2026-05-13, recrafted per @ronaldtse's "I meant (B)" review on 2026-05-15, all checks green, `mergeable: CLEAN`. Investigation also confirmed: (a) the master template's workflow-level `permissions: contents: write` is correct; (b) sample of 7 active callers all currently at `contents: write` (the original `contents: read` cap on `metanorma-plugin-datastruct` has been swept by an intervening regen); (c) all sibling reusable workflows (`xml2rfc-rake.yml`, `inkscape-rake.yml`, `monorepo-rake.yml`, `mn-processor-rake.yml`, `libreoffice-rake.yml`, `graphviz-rake.yml`, `rubygems-release.yml`) already have the PAT restore on both dispatch steps. Both Consequences of `#276` mechanically resolved; close-out comments posted on `#272` and `#276`. |
+| 5 | [`metanorma/ci#300`](https://github.com/metanorma/ci/issues/300) — "cimas revival: design gaps" | **Gap-4 proposal added**: flatten stale cimas PRs on new-wave-open. Surfaced by maintainer observation that PRs are missed for ~2 weeks on active-maintainer repos and longer on inactive ones. Proposed shape: strict-superset check, label-and-comment (not auto-close), with a single-branch-per-repo alternative noted for Phase B. |
+
+### Net effect on the queue
+
+Five items moved from "open, awaiting review" to "resolved or with clear close-out." `#272`, `#276`, `#292` are ready for close (suggested in comments). `#317` is a small fontist description-fix PR open for review. `#300` has a fourth design candidate filed. `cli#428` has fresh chain-health evidence on the thread.
+
+The pattern is escalation-through-work: progress concrete items rather than waiting on review, while leaving maintainer authority intact on the open design questions and the packed-mn scope. The artefacts (a merged PR, comment threads, a labelled investigation, the Gap-4 proposal) are concrete things to react to rather than further "what do you think?" prompts.
+
+### Carryover for the next working slot
+
+- `#274` pubid-narrow-wave (10 PRs, mechanical regeneration) — clones a fresh `cimas-wd`, runs `cimas sync -g pubid`, pushes 10 branches, opens 10 PRs, watches CI.
+- Incidental sweep: any residual `contents: read` cap on pubid-* callers gets corrected by the same regeneration (clean overlap with `#272/#276`).
+
+---
+
 ## Outcome — 2026-06-29: Stale bundler-cache root-cause fix; 5-week silent docker-block broken; new release→docker chain validated end-to-end for the first time
 
 Two structurally-related failures in the release chain were diagnosed and fixed tonight, and a third was retrospectively validated as actually working. Net effect: **the metanorma-cli docker chain has shipped a new image for the first time since 2026-05-16**, a ~6-week silent-failure window.
