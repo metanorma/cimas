@@ -422,6 +422,50 @@ repositories:
       .github/workflows/windows.yml: gh-actions/model/windows.yml
 ----
 
+==== Proposed schema extension — per-repo `with:` rendering (Gap 1, not yet implemented)
+
+NOTE: This subsection documents a **proposed** extension to the `files:` schema, not currently implemented. See https://github.com/metanorma/ci/issues/300[`metanorma/ci#300`] (Gap 1) for the full design discussion, including the concrete renderer change and the first intended user (`private-fonts: true` for `metanorma`).
+
+The current `files:` schema maps a downstream-file path to a template path as a single string. This works for cases where the template is fully self-contained, but breaks when the synced file needs a per-repo value that the shared template can't anticipate (e.g. `metanorma`'s `rake.yml` needs `private-fonts: true`, but `gh-actions/inkscape/rake.yml` has no slot for it).
+
+The proposed extension keeps the existing string form valid (fully backward compatible) and adds an optional map form for entries that need per-repo `with:` rendering:
+
+[source,yaml]
+----
+  metanorma:
+    remote: ssh://git@github.com/metanorma/metanorma
+    branch: main
+    files:
+      # Existing string form — kept verbatim, no per-repo with:
+      .rubocop.yml: gh-actions/master/.rubocop.yml
+      .github/workflows/release.yml: gh-actions/master/release.yml
+
+      # Proposed map form — template + per-repo with: values
+      .github/workflows/rake.yml:
+        template: gh-actions/master/rake.yml
+        with:
+          private-fonts: true
+----
+
+The renderer would route on the value's type: strings render as today; maps extract `template:` as the path-to-render and pass `with:` to ERB as a local variable for injection into the template's `with:` block. Templates that wish to support per-repo `with:` rendering gain an ERB injection block such as:
+
+[source,yaml]
+----
+jobs:
+  rake:
+    uses: metanorma/ci/.github/workflows/generic-rake.yml@main
+<% if defined?(file_with) && file_with.any? -%>
+    with:
+<% file_with.each do |k, v| -%>
+      <%= k %>: <%= v.inspect %>
+<% end -%>
+<% end -%>
+    secrets:
+      pat_token: ${{ secrets.METANORMA_CI_PAT_TOKEN }}
+----
+
+Until this lands, per-repo `with:` overrides have to be either inlined in each downstream file (and clobbered by every cimas-sync) or kept out-of-band as documentation, neither of which is sustainable.
+
 === `groups`
 
 Cimas offers "`grouping`" functionality to allow you to work with groups
