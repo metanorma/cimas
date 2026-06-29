@@ -303,6 +303,18 @@ Stocktake of remaining work beyond the 2026-06-29 escalation sweep. Roughly orde
 | `bundler-cache: true` + `Gemfile.lock` mutation check (cimas template audit automation) | 1-2 hrs | Forensic scan for the unsafe pattern across caller workflows |
 | Comprehensive layer-by-layer failure-mode documentation in `release-chain.md` | 3-4 hrs | Beyond the layer-7 entry already there |
 
+### 3b. Cimas small operational bug fixes ([`metanorma/cimas#49`](https://github.com/metanorma/cimas/issues/49))
+
+Filed 2026-06-30 from the wave's discoveries. Three small operational improvements:
+
+| Bug | Fix scope | Effort |
+|---|---|---|
+| `cimas open-prs -m` used as PR title not body (causes HTTP 422 on multi-line bodies) | Add `--body-file PATH` option; keep `-m` as title | ~30-60 min |
+| Patches regex `spec\.required_ruby_version\s*=.*` doesn't match `s.` block-var convention (reverse_adoc instance) | Relax regex to `(?:spec\|s)\.required_ruby_version\s*=.*` in cimas-config | 5 min |
+| `pattern did not match` warning conflates "regex didn't match" with "no-op identical substitution" | Distinguish the two cases with separate log paths | ~30 min |
+
+Total ~1-2 hrs focused cimas work. Slots in well between observability (`#302`) and the bigger Gap implementations.
+
 ### 4. `#300` Gap IMPLEMENTATIONS (the big work past the docs pass)
 
 All four Gaps are documented as "proposed, not implemented" in [`metanorma/cimas:README.adoc`](https://github.com/metanorma/cimas/blob/main/README.adoc) (commits `8f1705f`, `307955d`, `9e94446`); the table below tracks the implementation effort.
