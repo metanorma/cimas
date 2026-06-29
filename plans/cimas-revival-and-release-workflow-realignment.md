@@ -2,22 +2,19 @@
 
 Status as of 2026-06-29. Working draft kept locally; this file is the canonical published record. Updates land as direct commits to `main` per the org's plans/ convention (no PR ceremony for plan-only commits).
 
-## Standing scope boundary — `metanorma/packed-mn` is @ronaldtse's territory
+## Standing scope boundary — `metanorma/packed-mn` is led by @ronaldtse
 
-**Hands-off rule (recorded 2026-06-29).** The release-dispatch chain to `metanorma/packed-mn` ([`metanorma/metanorma-cli#428`](https://github.com/metanorma/metanorma-cli/issues/428): 4-of-5 platform workflows disabled, `repository_dispatch` wire broken since 2026-05-17, no release tag since v1.14.4 on 2025-12-01) is on Ronald's explicit lane and **we do not action it** beyond surfacing diagnostic facts on tickets. The work is his to drive.
+**Hands-off rule (recorded 2026-06-29).** Maintenance of `metanorma/packed-mn` and its release-dispatch chain ([`metanorma/metanorma-cli#428`](https://github.com/metanorma/metanorma-cli/issues/428): 4-of-5 platform workflows currently disabled, `repository_dispatch` wire has not fired since 2026-05-17, no release tag since v1.14.4 on 2025-12-01) sits with @ronaldtse. From this plan's scope **we do not action `metanorma/packed-mn` directly** — no reconstruction of the dispatch wire from our side, no re-enablement of disabled platform workflows, no PRs against the repo — beyond surfacing diagnostic facts on the relevant tickets for visibility.
 
-Evidence: in a direct Teams exchange 2026-06-11, Ronald stated "We only have one part that isn't working yet, packed-mn. But everything else is working." Two things follow:
+In practice:
 
-1. **Ronald's mental model on 2026-06-11 was incomplete** — at that time the docker-rebuild dispatch wire had already been silently failing every metanorma-cli release since 2026-05-16 (per [`metanorma/metanorma-cli#426`](https://github.com/metanorma/metanorma-cli/issues/426)), so "everything else is working" was demonstrably out of sync with reality. The docker side was fixed end-to-end the night of 2026-06-28/29 (`#314`/`#315`/`#316` + the new `release-passed → release-tag → build-push` chain validated against `metanorma-cli` v1.16.6 — see the "Outcome — 2026-06-29" entry above).
-2. **packed-mn is owned by him by his own framing.** He named it as "the one part not working" and implicitly "for him to fix." Our role is to keep his picture of the chain accurate (surface the now-closed docker gap on the cli#428 ticket so his model can update) and otherwise stay out of the way of his packed-mn work — no reconstruction of the dispatch wire from our side, no re-enablement of the disabled platform workflows, no PRs against `metanorma/packed-mn`.
+- Diagnostic facts (chain-state observations, build-log evidence) can land as factual comments on `cli#428` for visibility.
+- The `cli#428` ticket is cross-referenced from this SSOT and from `release-chain.md` for completeness.
+- Any change to `metanorma/packed-mn` itself waits on an explicit go-ahead from @ronaldtse, even where a fix would be small. The hands-off rule outranks the convenience.
 
-What this looks like in practice:
+For background context on the broader release-trigger surface: the docker-rebuild side of the release dispatch chain had been silently failing every metanorma-cli release since 2026-05-16 (per [`metanorma/metanorma-cli#426`](https://github.com/metanorma/metanorma-cli/issues/426)). That side was fixed end-to-end on the night of 2026-06-28/29 — see the "Outcome — 2026-06-29" entry below for the chain validation. Recording it here so the cross-referenced `cli#428` thread has the full chain-health picture available when packed-mn work resumes.
 
-- Diagnostic facts (chain-state observations, build-log evidence) can land as factual comments on `cli#428` if surfacing them updates Ronald's working set.
-- The cli#428 ticket can be cross-referenced from the SSOT and from `release-chain.md` for completeness.
-- **No code or workflow changes against `metanorma/packed-mn`** without an explicit go from Ronald, even when the breakage is obvious and the fix would be small. The hands-off rule outranks the convenience.
-
-When a future maintainer rebuilds packed-mn or any related dispatch wire, this section can be revisited; until then it is binding scope for the cimas-revival work tracked in this plan.
+This scope boundary can be revisited when packed-mn work resumes; until then it is the working assumption for the cimas-revival scope tracked in this plan.
 
 ---
 
