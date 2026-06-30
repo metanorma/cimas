@@ -366,6 +366,44 @@ All four Gaps are documented as "proposed, not implemented" in [`metanorma/cimas
 
 ---
 
+## Outcome — 2026-06-30 (evening sub-slot): cimas#49 bug fixes shipped end-to-end + #302 observability triplet complete + Gap 4 cheaper implemented
+
+A focused ~1-hour evening sub-slot cleared the cimas-side bug ticket cleanly, completed the entire `#302` observability scope addition, and implemented Gap 4 of `#300` in its cheaper variant. Eight PRs in total, all self-merged.
+
+### Sub-slot PRs
+
+| # | Item | PR |
+|---|---|---|
+| 1 | `cimas#49` Bug 2 — patches regex `(spec\|s)` + stale pubid group strip | [`metanorma/ci#324`](https://github.com/metanorma/ci/pull/324) |
+| 2 | `reverse_adoc` wave PR (unblocked by Bug 2) | [`metanorma/reverse_adoc#100`](https://github.com/metanorma/reverse_adoc/pull/100) |
+| 3 | `cimas#49` Bug 1 — `cimas open-prs --body` / `--body-file` flags | [`metanorma/cimas#50`](https://github.com/metanorma/cimas/pull/50) |
+| 4 | `cimas#49` Bug 3 — distinguish patches warnings (pattern-absent WARNING vs no-op INFO) | [`metanorma/cimas#51`](https://github.com/metanorma/cimas/pull/51) |
+| 5 | `#302` 1st observability addition — post-`gem push` rubygems-API verification step | [`metanorma/ci#325`](https://github.com/metanorma/ci/pull/325) |
+| 6 | `#302` 2nd observability addition — post-dispatch acknowledgement poll | [`metanorma/ci#326`](https://github.com/metanorma/ci/pull/326) |
+| 7 | `#302` 3rd observability addition — `release-chain.md` "dispatch accepted vs acted on" doc | [`metanorma/ci#327`](https://github.com/metanorma/ci/pull/327) |
+| 8 | `#300` Gap 4 cheaper — `cimas open-prs --supersede-stale` flag | [`metanorma/cimas#52`](https://github.com/metanorma/cimas/pull/52) |
+
+### Net effect on the rehabilitation arc
+
+- **`metanorma/cimas#49` issue auto-closed** (all 3 bugs landed; Bug 2 via `ci#324`, Bug 1 via `cimas#50`, Bug 3 via `cimas#51`).
+- **`#302` observability scope from the 2026-06-29 follow-up comment is now fully implemented** — all three scope items (post-publish gem verification, post-dispatch acknowledgement, doc the distinction). Future silent-fail classes of the `#314` shape (publish succeeds but gem not live) or `#426` shape (dispatch accepted but no run created) will surface immediately rather than weeks later.
+- **`#300` Gap 4 implemented** in its cheaper-variant form (label-and-comment-but-don't-close, no strict-superset gate). Future cimas-sync waves can use `--supersede-stale` to keep the PR queue clean. cimas `README.adoc` updated to reflect "implemented" status with a usage example.
+
+### Forward-roadmap status after this sub-slot
+
+- Section 1 (#274 wave): bulk done. Section 1.b stragglers handled via the late-night Jun 29/30 wave. Reverse_adoc unblocked by Bug 2 and shipped. MISSING + NOVER triage still pending for next-wave inclusion.
+- Section 2 (#302 observability): **closed** — all three additions landed (`#325`, `#326`, `#327`).
+- Section 3 (#309 streamlining): unchanged from the prior pass. The end-to-end contract test remains the biggest single piece, multi-day; comprehensive layer-by-layer documentation in `release-chain.md` partially advanced via the `#327` Layer-11 augmentation but the broader pass remains.
+- Section 3b (`cimas#49`): **closed** — all three bugs fixed.
+- Section 4 (#300 Gaps): Gap 4 **implemented** (`cimas#52`). Gaps 1, 2, 3 still documented as proposed in cimas README + #300; implementation pending.
+- Section 5 (hygiene): unchanged.
+- Section 6 (Phase B / Trusted Publishing / stale husks): unchanged.
+- Section 7 (hands-off): unchanged.
+
+🤖
+
+---
+
 ## Outcome — 2026-06-29/30: late-night wave, deprecation triage, plugins family completion, cimas bug surfacings
 
 The carryover wave (Section 1.a + 1.b of the forward roadmap above) was executed late on 2026-06-29 across the processor/tools/metanorma/plugins/model groups in `cimas-wd-2026-06-29`. Net outcome: **8 PRs created, 17 no-op (already template-current), 6 deprecation strips landed, 4 cimas bugs surfaced**.
