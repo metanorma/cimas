@@ -447,6 +447,26 @@ module Cimas
         # `cimas open-prs` before any PR could be created.
         assignees = Array(config['assignees']).flat_map { |x| x.is_a?(String) ? x.split(',') : x }
         reviewers = Array(config['reviewers']).flat_map { |x| x.is_a?(String) ? x.split(',') : x }
+
+        # GitHub rejects self-review requests with HTTP 422
+        # "Review cannot be requested from pull request author."
+        # The rescue path below in the request-review block previously caught
+        # this and skipped the entire request, dropping the OTHER valid
+        # reviewers as a side-effect. Pre-filter the token user out so the
+        # remaining reviewers still get requested. (#7)
+        begin
+          token_user = github_client.user.login
+          if reviewers.include?(token_user)
+            puts "[INFO] open-prs: excluding token user " \
+                 "'#{token_user}' from reviewers (cannot self-review)"
+            reviewers = reviewers.reject { |r| r == token_user }
+          end
+        rescue Octokit::Error => e
+          puts "[WARNING] open-prs: could not resolve token user " \
+               "for self-review filter (#{e.message}); " \
+               "proceeding with reviewers as configured"
+        end
+
         cooldown_count = config['cooldown_count']
         cooldown_time = config['cooldown_time']
 
