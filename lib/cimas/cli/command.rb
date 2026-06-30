@@ -468,6 +468,30 @@ module Cimas
           g = Git.open(repo_dir)
           github_slug = git_remote_to_github_name(repo.remote)
 
+          # --supersede-stale: detect prior open cimas-sync-* PRs on this repo.
+          # See metanorma/ci#300 Gap 4. Cheaper-version (no strict-superset
+          # check): we label-and-comment-but-do-not-close the old PRs, letting
+          # the reviewer keep authority over the close decision. The new PR's
+          # body is prepended with a "Supersedes #X, #Y" note so the reviewer
+          # sees the full picture in the most recent PR.
+          stale_prs = []
+          if options['supersede_stale']
+            begin
+              stale_prs = github_client.pull_requests(github_slug, state: 'open').select do |stale|
+                stale.head.ref.start_with?('cimas-sync-') && stale.head.ref != branch
+              end
+            rescue Octokit::Error => e
+              puts "[WARNING] #{github_slug}: could not list open PRs for --supersede-stale (#{e.message}); proceeding without."
+              stale_prs = []
+            end
+          end
+          final_body = if stale_prs.any?
+                         supersede_list = stale_prs.map { |p| "##{p.number}" }.join(", ")
+                         "_Supersedes #{supersede_list} from prior cimas-sync waves._\n\n#{body}"
+                       else
+                         body
+                       end
+
           dry_run("Opening GitHub PR: #{github_slug}, branch #{repo.branch} <- #{branch}, message '#{message}'") do
             puts "Opening GitHub PR: #{github_slug}, branch #{repo.branch} <- #{branch}, message '#{message}'"
 
@@ -477,11 +501,29 @@ module Cimas
                 repo.branch,
                 branch,
                 message,
-                body,
+                final_body,
               )
               number = pr['number']
 
               github_client.add_labels_to_an_issue(github_slug, number, ['automerge']) if add_auto_merge_label
+
+              # Label-and-comment-but-don't-close the superseded PRs (Gap 4 cheaper).
+              stale_prs.each do |stale|
+                begin
+                  github_client.add_labels_to_an_issue(github_slug, stale.number, ["superseded-by-##{number}"])
+                  github_client.add_comment(
+                    github_slug,
+                    stale.number,
+                    "Superseded by ##{number} from a later cimas-sync wave (`#{branch}`). " \
+                    "This PR was **not auto-closed** by cimas — the reviewer keeps authority over the close decision. " \
+                    "Close after merging ##{number}, or rebase this branch onto something else if part of its content should still be preserved. " \
+                    "(metanorma/ci#300 Gap 4)"
+                  )
+                  puts "  superseded #{github_slug}\##{stale.number} (labelled + commented)"
+                rescue Octokit::Error => e
+                  puts "  [WARNING] could not label/comment supersede on #{github_slug}\##{stale.number}: #{e.message}"
+                end
+              end
 
               puts "PR #{github_slug}\##{number} created"
 
