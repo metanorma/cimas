@@ -289,26 +289,31 @@ NOTE: This sub-command is considered "`destructive`" as it
 alters the state of GitHub repositories by creating
 pull requests.
 
-===== Proposed extension — supersede stale PRs (Gap 4, not yet implemented)
+===== `--supersede-stale` flag (Gap 4, implemented 2026-06-30 in cheaper form)
 
-NOTE: This subsection documents a **proposed** extension to the `cimas open-prs` sub-command, not currently implemented. See https://github.com/metanorma/ci/issues/300#issuecomment-4832465285[`metanorma/ci#300` (Gap 4)] for the full design discussion.
+When `cimas open-prs` runs against a repo where an earlier cimas-sync wave's PR is still open (i.e. unmerged from a previous wave), the result without intervention is **stacked PRs on the same repo carrying overlapping changes**, with no automated relationship between them. The previous wave's PR (e.g. `PR#5` on the `cimas-sync-2026-06-15` branch) and the new wave's PR (e.g. `PR#10` on `cimas-sync-2026-06-29`) coexist independently; the reviewer either merges both (redundant churn, possible conflicts), merges only the latest (`PR#5`'s review thread gets orphaned), or freezes (the most common outcome). The pattern bites most on inactive-maintainer repos where PRs can sit for weeks or months before notice.
 
-When `cimas open-prs` runs against a repo where an earlier cimas-sync wave's PR is still open (i.e. unmerged from a previous wave), the result today is **stacked PRs on the same repo carrying overlapping changes**, with no automated relationship between them. The previous wave's PR (e.g. `PR#5` on the `cimas-sync-2026-06-15` branch) and the new wave's PR (e.g. `PR#10` on `cimas-sync-2026-06-29`) coexist independently; the reviewer either merges both (redundant churn, possible conflicts), merges only the latest (`PR#5`'s review thread gets orphaned), or freezes (the most common outcome).
+The `--supersede-stale` flag (opt-in) implements the cheaper-variant design discussed in https://github.com/metanorma/ci/issues/300#issuecomment-4832465285[`metanorma/ci#300` (Gap 4)]. For each target repo, when set:
 
-The pattern bites most on inactive-maintainer repos where PRs can sit for weeks or months before notice, accumulating into multi-PR stacks per repo.
+1. Before opening the new PR, lists existing open PRs whose head branch starts with `cimas-sync-` (i.e. previous wave PRs that never merged).
+2. Prepends a `_Supersedes #X, #Y from prior cimas-sync waves._` line to the new PR's body, naming the superseded PRs.
+3. After the new PR is opened, **labels** each superseded PR with `superseded-by-#N` (where N is the new PR's number) and **posts a comment** linking the new PR.
+4. **Does NOT auto-close** the superseded PRs — the reviewer keeps authority over the close decision.
 
-The proposed extension adds an opt-in `--supersede-stale` flag that, for each target repo:
+[source,sh]
+----
+cimas open-prs --supersede-stale \
+  -r ~/src/cimas-wd-2026-06-29 \
+  -f cimas.yml \
+  -b cimas-sync-2026-06-29 \
+  -m "Cimas sync 2026-06-29: ..." \
+  --body-file /tmp/wave-body.md \
+  -g processor
+----
 
-1. Lists existing open PRs whose head branch matches `cimas-sync-*`.
-2. For each, runs a **strict-superset check**: does the new wave's planned diff strictly contain the old PR's diff (e.g. `git diff <old-pr-head>..<new-pr-head>` is empty going one direction)? If not, the old PR is left alone — different-intent waves stay parallel.
-3. If the new is a strict superset of the old: adds a `superseded-by-#N` label to the old PR + a single comment pointing at the new PR. **The old PR is NOT auto-closed.** The reviewer closes it after merging the new one, or rebases the old onto something else if they want to preserve part of it.
-4. The new PR's body mentions all superseded PRs: "Supersedes #5, #8 from prior waves" — gives the reviewer the full context in the most recent PR.
+A future PR may layer a strict-superset diff gate on top (only supersede when the new wave's diff strictly contains the old PR's diff, so different-intent waves stay parallel). For now the simpler cheaper-variant is sufficient — the label and comment make the supersede relationship visible and let the reviewer make the final close call.
 
-The strict-superset gate is what makes this safe (different-intent waves don't accidentally clobber each other). The label-and-comment-but-don't-close behaviour is what makes it polite (the reviewer keeps authority over the close decision).
-
-A more elegant single-branch-per-repo alternative (rebase the existing `cimas-sync` branch in-place rather than opening new PRs) is noted in the ticket as a Phase B candidate — bigger mental-model shift, defer until the revival settles.
-
-Until either is implemented, the maintainer's working pattern is to manually identify stacked PRs per repo and triage by hand.
+A more elegant single-branch-per-repo alternative (rebase the existing `cimas-sync` branch in-place rather than opening new PRs) is noted in `metanorma/ci#300` as a possible Phase-B candidate — bigger mental-model shift, defer until the revival settles.
 
 ==== `cimas for-each`
 
