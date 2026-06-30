@@ -191,6 +191,10 @@ subcommands = {
     opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
       options['groups'] = groups
     end
+
+    opts.on("--supersede-stale", "When opening a PR, detect any pre-existing open PRs on the same repo whose head branch starts with 'cimas-sync-' (i.e. previous wave PRs that never merged), label them 'superseded-by-#N' (where N is the new PR number), and post a comment linking the new PR. Does NOT auto-close the old PRs — the reviewer keeps authority over the close decision. The new PR's body is prepended with a 'Supersedes #X, #Y' line. See metanorma/ci#300 Gap 4.") do |_|
+      options['supersede_stale'] = true
+    end
   end,
   'for-each' => OptionParser.new do |opts|
     opts.banner = "Usage: cimas sync [options]"
