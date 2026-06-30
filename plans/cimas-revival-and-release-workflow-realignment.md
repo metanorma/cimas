@@ -641,3 +641,37 @@ The fix landed with two-file scope rather than one because Rubocop's `Gemspec/Re
 - **Wall-clock: ~80 minutes total** (out of 90 min target)
 
 🤖
+
+---
+
+## Outcome — 2026-07-01 (post-midnight late sub-slot continued): atmospheric strip + #300 Gap 3 acceptance criteria comment
+
+Section 5 hygiene item: the `atmospheric` push-failed wave PR (SSOT estimate 30 min). Resolved by stripping the stale cimas.yml entry — the underlying cause was a silent transfer-out-of-org, undiscovered for ~2 months 7 days.
+
+### The drift
+
+`metanorma/atmospheric` was transferred out of the metanorma org on **2026-04-23T05:21:06Z** — the same day a new single-repo `atmospheris` org was created. The gem was renamed `atmospheric → atmospheris`. Live destination: `atmospheris/atmospheris` (public, active, last push 2026-04-23 itself). The cimas.yml entry continued to push-fail in every wave since with cimas reporting only "1 push-failed (atmospheric)" and no diagnostic of why.
+
+### PR + comment
+
+| # | Item | Surface |
+|---|---|---|
+| 1 | Strip atmospheric from cimas.yml, leaving a comment block with the transfer history | [`metanorma/ci#329`](https://github.com/metanorma/ci/pull/329) (merged `1727899`) |
+| 2 | `#300` Gap 3 acceptance criteria comment naming the four drift failure modes (deleted, archived, transferred-out, default-branch-renamed) and the cheap API-call detection signal for each | [`#300` comment](https://github.com/metanorma/ci/issues/300#issuecomment-4844577163) |
+
+The Gap 3 comment doubles as a concrete implementation spec — when the drift-audit subcommand work begins, the criteria + the detection-signal table + the recommended sync-block-with-override behaviour are ready to consume.
+
+### Forward-roadmap impact
+
+Section 5 hygiene: atmospheric resolved. The other Section 5 items (25 wave-PR creation failures, 87 permissions amend gaps, 6 *-ruby tooling repos) remain as multi-hour scope.
+
+Section 4 `#300` Gap 3: enriched with concrete acceptance criteria from a real-world canonical case (~2 months 7 days from transfer to discovery, with cimas reporting only an undiagnosed push-fail in the interim). Implementation seam still pending Phase B's `Cli::Command` decomposition (gives drift-audit a clean structural home).
+
+### Third sub-slot revised grand totals
+
+- **4 PRs shipped + merged** (cimas#53, cimas#54, csa-ccm-tools#39, ci#329)
+- **18 issues closed** (cimas: 7; ci: 11) + **9 arc-link/design comments** (cimas: 5; ci: 4)
+- **Section 5 hygiene: atmospheric resolved** (1 of the listed Section 5 items cleared)
+- **`#300` Gap 3 enriched** with implementation-ready acceptance criteria
+
+🤖
