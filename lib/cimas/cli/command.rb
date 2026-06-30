@@ -70,7 +70,7 @@ module Cimas
             puts "Git cloning #{repo_name} from #{attribs['remote']}..."
             Git.clone(attribs['remote'], repo_name, path: repos_path)
           else
-            puts "Skip cloning #{repo_name}, #{repo_dir} already exists."
+            puts "Skip cloning #{repo_name}, #{repo_dir} already exists." if verbose
           end
         end
       end
@@ -369,7 +369,7 @@ module Cimas
 
           g = Git.open(repo_dir)
           dry_run("Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}") do
-            puts "repo.branch #{repo.branch}"
+            puts "repo.branch #{repo.branch}" if verbose
 
             unless keep_changes
               g.checkout(repo.branch)
@@ -383,7 +383,9 @@ module Cimas
                 g.status.added.empty? &&
                 g.status.deleted.empty?
 
-              puts "Skipping commit on #{repo_name}, no changes detected."
+              if verbose
+                puts "Skipping commit on #{repo_name}, no changes detected."
+              end
             else
               puts "Committing on #{repo_name}."
               g.commit_all(commit_message)#, amend: true)
