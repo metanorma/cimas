@@ -549,3 +549,61 @@ Section 7 (hands-off): unchanged.
 - Realistic time estimates honoured throughout (no PR took longer than 12 minutes from branch-cut to merge; comments batched 5-at-a-time in parallel writes + parallel posts)
 
 🤖
+
+---
+
+## Outcome — 2026-07-01 (post-midnight sub-slot): ci backlog sweep — 11 closures + 3 arc-link comments + dashboard codecov question resolved
+
+Same triage shape applied to the `metanorma/ci` ticket queue, parallel to the cimas-side sweep two hours earlier. A mid-flight intercept verified a specific claim before the closure landed: the `ci#68` coverage-badges close was about to use the generic "no convergence in 5 years" framing when the actual answer was sharper — `metanorma/dashboard` is the centralised badge surface, coverage tracking was once included via Code Climate, and every call site is now commented out (the `<%#` markers throughout `README.adoc.erb`). The convergence happened; the decision was no.
+
+### Sub-slot closures
+
+| # | Reason |
+|---|---|
+| `ci#292` | Wrapper convergence — close-out comment from 2026-06-29 actioned (scope 1 stood down 2026-06-18; scope 2 rehomed to `#302` then implemented via `#325`/`#326`/`#327`) |
+| `ci#276` | tests-passed permissions cluster — close-out comment from 2026-06-29 actioned ([`#277`](https://github.com/metanorma/ci/pull/277) PAT restore merged; siblings + active callers verified aligned) |
+| `ci#272` | tests-passed permissions cluster — same close-out as `#276` |
+| `ci#302` | Observability triplet — fully implemented (`#325` post-publish gem verify + `#326` post-dispatch ack poll + `#327` release-chain.md doc); structural silent-fail classes now surface immediately |
+| `ci#237` | fontist-setup investigation — resolved via [`#317`](https://github.com/metanorma/ci/pull/317) (Option B kept-both: `fontist-setup` + `fontist-repo-setup` complementary; wrong description fixed; documented distinction in both action.ymls) |
+| `ci#210` | bundle update in flavor tests — Option A close-at-source (the script already runs `bundle update` since 2022-01-24; the failure mode is upstream-per-gem gemspec under-specification, not a CI-side script gap) |
+| `ci#203` | Review cimas config for all repositories — active as continuous operational activity via the rehabilitation arc (strip waves `#319`–`#323`; structural continuations via Phase B YAML schemas + `#300` Gap 3) |
+| `ci#199` | Replace Hound with rubocop — duplicate of `cimas#36` closed earlier; Hound shut down 2025, rubocop via centralised oss-guides ruleset + per-repo GHA is the de facto org-wide implementation |
+| `ci#117` | Conventional commit message check — discussion never converged in 3 years; metanorma stack uses descriptive imperative commit messages without `type(scope): subject` formal shape; reopenable with concrete proposal |
+| `ci#94` | Automerge PR workflow v2 — superseded by GH-native `gh pr merge --auto` flow + `cimas#45`'s auto-delete-on-merge + cimas-side `add_auto_merge_label` |
+| `ci#68` | Coverage badges — **convergence happened, decision was no**: `metanorma/dashboard`'s [`README.adoc.erb`](https://github.com/metanorma/dashboard/blob/main/README.adoc.erb) emits per-gem badges for gem version, GHA workflows, PRs, commits-since — a `shield_code_climate` helper IS defined in [`erb_helper.rb`](https://github.com/metanorma/dashboard/blob/main/erb_helper.rb) but every call site is commented out (`<%#` markers throughout). Coverage tracking was tried (Code Climate, not codecov) and deliberately disabled across the matrix. Reopenable if a maintainer drives codecov-and-dashboard-re-enablement. |
+
+### Sub-slot arc-link comments (remain open, anchored to roadmap)
+
+| # | Roadmap anchor |
+|---|---|
+| `ci#197` (Ronald handle reassignment) | Section 5 hygiene's "6 *-ruby tooling repos" sweep absorbs the per-repo locations; cimas-patches mode is the centralisable vector for cimas.yml entries. **Blocked on the target handle being specified** — replacement target needs maintainer decision before sweep can run |
+| `ci#186` (mn-samples `convert.yml` centralisation) | Out of current arc scope (build-system migration for sample-doc repos, not release-chain). Two paths: small canary if mn-samples maintenance is currently painful, or defer until Phase B's reusable-workflow rewriting pass absorbs |
+| `ci#82` (unify native-extension workflow) | Section 5 hygiene's "6 *-ruby tooling repos needing custom edits" IS this cluster (`emf2svg-ruby`, `mn2pdf-ruby`, `mn2sts-ruby`, `mnconvert-ruby`, `mnconvert`, `sts2mn-ruby`); `#300` Gap 1's per-repo `with:` rendering is the canonical demand case. Implementation as `cimas-config/gh-actions/native-ext/` template family parallel to `master/` |
+
+### Hands-off / already-tracked at arc level
+
+- `ci#309` (assigned maintainer) — release-chain streamlining; partial via `#327` doc augmentation; broader pass still pending. Arc-resident
+- `ci#300` (no assignee) — cimas revival design gaps; Gap 4 cheaper landed via `cimas#52`; Gaps 1/2/3 pending. Arc-resident
+- `ci#278` (assigned maintainer) — patch-release breaking-change heuristic guard; deferred from earlier sub-slot. Arc-resident
+- `ci#274` (opoudjis, "help wanted") — the big wave ticket; bulk done late-night 2026-06-29/30, MISSING + NOVER pending. Arc-resident
+
+### Net state
+
+- **Open ci backlog: 18 → 7** (4 arc-resident + 3 arc-link-commented)
+- **Closed today: 11 ci issues** (the 3 early closes for #292/276/272 plus the 8 substantive closures in this sub-slot)
+- **Arc-link comments: 3** giving every remaining-open older ticket a roadmap pointer
+
+### Methodological note — verified-claim-before-close
+
+The "verify dashboard does NOT do codecov before closing as no-convergence" intercept is the lesson from this sub-slot. Default close-comments were drafted under the framing "no convergence on coverage in 5 years" — accurate but generic. The actual answer (dashboard exists, coverage WAS once included via Code Climate, all call sites are commented out → a deliberate de-adoption) is shaper-of-future-decisions in a way the generic frame isn't. The discipline: when a closure cites "no convergence", actively look for the surface where convergence would have shown up rather than just asserting absence.
+
+### Combined two-pass totals (cimas + ci backlog sweep)
+
+- **PRs shipped + merged: 2** (`cimas#53`, `cimas#54`)
+- **Total closures: 18** (cimas: 7; ci: 11)
+- **Total arc-link comments: 8** (cimas: 5; ci: 3)
+- **SSOT updates: 2 per pass** (canonical + sanitised public)
+- **Open cimas + ci backlog: 31 → 13** (cimas 13→6; ci 18→7) — net **18 tickets cleared, ~60% reduction**
+- **Wall-clock: ~90 minutes total** (cimas pass ~35min + ci pass ~25min + SSOT updates ~10min + intercept-and-correction ~5min)
+
+🤖
