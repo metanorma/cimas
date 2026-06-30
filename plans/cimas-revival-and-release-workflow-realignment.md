@@ -473,3 +473,79 @@ To be filed as one consolidated `metanorma/cimas` issue (1, 3, 4 together since 
 `reverse_adoc.gemspec` uses the `s.` block-var convention; patches regex doesn't match. Not in tonight's wave. Two options for follow-up: (a) manually rewrite `reverse_adoc.gemspec` to use `spec.` consistently (15-line repo-style change), or (b) fix cimas Bug 3 above (regex relaxation, one-line cimas change benefiting all `s.`-style gemspecs). Option (b) is the cleaner root-cause fix. Deferred for daylight pickup.
 
 🤖
+
+---
+
+## Outcome — 2026-06-30 (late-evening sub-slot): cimas backlog triage — 2 quick-win PRs + 5 closures + 5 arc-link comments
+
+A focused 30-minute sub-slot framed around the cimas/ci rehabilitation arc rather than checkbox-style backlog deletion. The framing — map every open ticket to its place in the arc rather than judging each in isolation — drove the split between closures, arc-link comments, and ship-now PRs. Net result: open cimas backlog shrunk from **13 → 6**, with the 6 remaining all anchored to specific roadmap items rather than floating as unprioritised 2020-era debt.
+
+### Sub-slot PRs (both self-merged)
+
+| # | Item | PR |
+|---|---|---|
+| 1 | `cimas#7` — filter token user out of reviewers (open-prs API rejected self-review and the rescue path was dropping the OTHER reviewers as a side-effect) | [`metanorma/cimas#53`](https://github.com/metanorma/cimas/pull/53) |
+| 2 | `cimas#12` — gate noisy per-repo no-op log lines under `--verbose` (Skip cloning / Skipping commit / repo.branch debug print — dominated the output of any wave run regardless of `-v`) | [`metanorma/cimas#54`](https://github.com/metanorma/cimas/pull/54) |
+
+### Closures with reasoning
+
+| # | Reason |
+|---|---|
+| `cimas#7` | Closed via [`cimas#53`](https://github.com/metanorma/cimas/pull/53) |
+| `cimas#8` | Parallelise git ops — deferred without active demand; serial run is ~5-10 min for 187 repos, not on critical path; future need can route through Gap 3 drift-audit's independent-per-repo scan if perf surfaces |
+| `cimas#9` | Fix `lint` subcommand — superseded; no current code trace, no demand signal in 6 years; structural successor is Phase B YAML schemas + `#300` Gap 3 drift-audit |
+| `cimas#10` | GitLab support — out of scope; cimas serves GitHub-hosted gems; dual-pathing every Octokit call against gitlab-ruby for zero foreseeable consumer is not on the rehabilitation arc; if a downstream needs it, sibling tool sharing cimas-config schema is cleaner than dual-pathing |
+| `cimas#12` | Closed via [`cimas#54`](https://github.com/metanorma/cimas/pull/54) |
+| `cimas#20` | Central code-health badges — obsolete without demand signal; in practice rubocop/lint badges handled via oss-guides, CI status via per-repo GHA, version via rubygems |
+| `cimas#36` | Replace Hound with rubocop — superseded; Hound shut down in early 2025; rubocop via centralised oss-guides ruleset + per-repo GHA is the de facto org-wide implementation |
+
+### Arc-link comments (remain open, anchored to roadmap)
+
+| # | Roadmap anchor |
+|---|---|
+| `cimas#4` (files under groups key) | Phase B YAML schemas + `#300` Gap 1 (per-repo `with:` rendering schema) |
+| `cimas#5` (Transition to Thor) | Subsumed by Phase B "OOP/MECE decomposition of `Cli::Command`" — framework decision deferred until decomposition is in scope |
+| `cimas#13` (`approve-prs` subcommand) | Phase B decomposition; flagged scoping question (which PRs match? gated by what?) |
+| `cimas#14` (`merge-prs` subcommand) | `#300` Gap 4 territory (strict-flatten path past `--supersede-stale`); Phase B decomposition; flagged scoping question (CI green? required approvals?) |
+| `cimas#15` (config sanity check every time) | Phase B YAML schemas (structural sanity at load-time) + `#300` Gap 3 drift-audit (state divergence) — two-pronged "every-time" surface |
+
+### Hands-off (per the standing scope boundary)
+
+| # | Reason |
+|---|---|
+| `cimas#40` (rake.yml permissions block) | Untouched. cimas-template maintenance lane, awaiting the assigned maintainer's review |
+
+### Net state
+
+- **Open cimas backlog: 13 → 6** (5 arc-resident + 1 hands-off)
+- **Closed today: 7** (#7 + #12 by PR-Closes; #8, #9, #10, #20, #36 by triage close-with-comment)
+- **Arc-link comments: 5** giving every remaining-open ticket a roadmap pointer
+
+### Why this matters for the rehabilitation arc
+
+Before this sub-slot, the cimas backlog was a mix of fresh actionable items (cimas#49 just landed) and untouched 2020-era ticket debt that hadn't been triaged in 5-6 years. The mixed state meant a maintainer (or contributor) reading the issue list couldn't tell at a glance which items represented genuine current work vs unprioritised noise. After this sub-slot, **every open cimas ticket has a recent comment placing it in the rehabilitation arc** — either pointing at the Phase B refactor scope, at a specific `#300` Gap, or (for `cimas#40`) at the standing scope boundary. The backlog now mirrors the roadmap rather than being parallel to it.
+
+### Forward-roadmap status after this sub-slot
+
+Section 1 (#274 wave): unchanged from evening sub-slot.
+
+Section 2 (#302 observability): unchanged — closed.
+
+Section 3 (#309 streamlining): unchanged.
+
+Section 3b (`cimas#49`): unchanged — closed.
+
+Section 4 (#300 Gaps): unchanged — Gap 4 cheaper landed; Gaps 1/2/3 pending.
+
+Section 5 (hygiene): unchanged.
+
+Section 6 (Phase B / Trusted Publishing / stale husks): **enriched with concrete cimas backlog tickets** — Phase B now has 5 specific backlog tickets (`cimas#4`, `#5`, `#13`, `#14`, `#15`) anchored to it as future scope inputs rather than floating as separate tracks. When Phase B work starts, those tickets will be the user-side specs.
+
+Section 7 (hands-off): unchanged.
+
+### Sub-slot totals
+
+- **30 minutes wall-clock**, 2 PRs + 10 comments
+- Realistic time estimates honoured throughout (no PR took longer than 12 minutes from branch-cut to merge; comments batched 5-at-a-time in parallel writes + parallel posts)
+
+🤖
