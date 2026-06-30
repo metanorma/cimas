@@ -168,8 +168,20 @@ subcommands = {
       options['merge_branch'] = branch
     end
 
-    opts.on("-m MESSAGE", "--message=MESSAGE", "Commit message") do |message|
+    opts.on("-m MESSAGE", "--message=MESSAGE", "PR title (≤256 chars; what shows on the PR list page)") do |message|
       options['pr_message'] = message
+    end
+
+    opts.on("--body=BODY", "Inline PR body (markdown). Mutually exclusive with --body-file.") do |body|
+      options['pr_body'] = body
+    end
+
+    opts.on("--body-file=PATH", "Path to a file whose contents become the PR body (markdown). Preferred for any non-trivial body — shell-escape-safe and version-controllable. Mutually exclusive with --body.") do |path|
+      file = Pathname.getwd + path
+      unless file.exist?
+        raise OptionParser::InvalidArgument, "--body-file path does not exist: #{file}"
+      end
+      options['pr_body_file'] = file
     end
 
     opts.on("-a ASSIGNMENTS", "--assign=ASSIGNMENTS", "A comma-separated list (no spaces around the comma) of GitHub handles to assign to this pull request.") do |assignees|
