@@ -195,10 +195,24 @@ module Cimas
             matched.each do |file_path|
               rel_path = file_path.sub(/\A#{Regexp.escape(repo_dir)}\/?/, '')
               original = File.read(file_path)
-              updated = original.gsub(find_regex, replacement)
+              # Distinguish two cases that previously both logged the same
+              # misleading "pattern did not match, file unchanged" warning
+              # (see metanorma/cimas#49 Bug 3):
+              #   - `find` regex doesn't appear in the file at all (the line
+              #     this patch wants to update is genuinely absent — e.g. a
+              #     gemspec with no `required_ruby_version` line, the NOVER
+              #     case). WARNING-level: maintainer may want to add the line.
+              #   - `find` matches but `gsub` produces identical text (the
+              #     file is already at the target value). INFO-level: this is
+              #     a normal idempotent no-op, not a problem.
+              unless find_regex.match?(original)
+                puts "[WARNING] Patch '#{patch_name}' on #{repo_name}:#{rel_path}: pattern not present in file (line absent — consider whether the patch should also handle insertion)."
+                next
+              end
 
+              updated = original.gsub(find_regex, replacement)
               if original == updated
-                puts "[WARNING] Patch '#{patch_name}' on #{repo_name}:#{rel_path}: pattern did not match, file unchanged."
+                puts "[INFO] Patch '#{patch_name}' on #{repo_name}:#{rel_path}: already at target value, no-op."
                 next
               end
 
