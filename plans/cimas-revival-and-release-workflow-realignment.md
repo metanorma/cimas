@@ -675,3 +675,42 @@ Section 4 `#300` Gap 3: enriched with concrete acceptance criteria from a real-w
 - **`#300` Gap 3 enriched** with implementation-ready acceptance criteria
 
 🤖
+
+---
+
+## Outcome — 2026-07-01 (post-midnight late sub-slot finale): standoc + isodoc gated-release restoration + Gap 3 criterion #2
+
+A mid-flight intercept during the Coradoc opt-out audit caught that standoc + isodoc were listed as having the "do immediate release without waiting for unit tests pass" opt-out rationale — when in fact the per-repo `release.yml` files on both repos had been moved BACK to the gated `metanorma/ci/.github/workflows/rubygems-release.yml@main` path in June 2026. The cimas.yml was missed in that pass; each subsequent wave silently skipped both repos for rake/release with no surface alarm.
+
+### Diagnosis
+
+- 2024-08-06 commit [`099925c`](https://github.com/metanorma/ci/commit/099925c) added the "immediate release" commented-out lines for standoc + isodoc.
+- **June 2026**: per-repo `release.yml` on both was moved BACK to the gated path. Verified by direct API read of both repos' current release.yml.
+- cimas.yml was missed. Each cimas-sync wave silently skipped the rake/release entries.
+- Detection time from per-repo restoration to cimas.yml restoration: **~1 month**. The discovery vector: a manual audit while spec'ing Gap 3 silent-opt-out detection, which surfaced the contradiction.
+
+### PR + comments
+
+| # | Item | Surface |
+|---|---|---|
+| 1 | Restore standoc + isodoc gated-release sync entries; replace stale rationale with restoration-context comment; standoc rake.yml swapped from removed `plantuml/rake.yml` to `inkscape/rake.yml` | [`metanorma/ci#330`](https://github.com/metanorma/ci/pull/330) (merged `fccc854`) |
+| 2 | `#300` Gap 3 acceptance criterion #2 (silent template opt-out detection); `#330` named as the canonical real-world case | [`#300` comment](https://github.com/metanorma/ci/issues/300#issuecomment-4844812873) |
+
+The Gap 3 criterion comment also flagged `metanorma-plugin-glossarist`'s commented-out `.rubocop.yml` entry (no inline rationale) as unverified — could be legitimate documented opt-out OR another stale-opt-out instance; needs follow-up.
+
+### Forward-roadmap impact
+
+Section 5 hygiene: standoc + isodoc opt-out drift cleared in addition to atmospheric. The silent-drift pattern surfaced by this audit suggests an org-wide audit pass (when Gap 3 lands) will find more instances of the same shape.
+
+Section 4 `#300` Gap 3: now has **two concrete acceptance criteria comments** (URL-drift + silent-opt-out) anchored to real-world canonical cases (atmospheric + ci#330). When implementation begins, the spec is ready to consume.
+
+### Final third-sub-slot grand totals
+
+- **5 PRs shipped + merged** (cimas#53, cimas#54, csa-ccm-tools#39, ci#329, ci#330)
+- **18 issues closed** (cimas: 7; ci: 11) + **10 arc-link/design comments** (cimas: 5; ci: 5)
+- **2 Section 5 hygiene items cleared** (atmospheric strip; standoc + isodoc gated-release sync restoration)
+- **`#300` Gap 3 enriched with TWO concrete acceptance criteria** anchored to real-world canonical cases (atmospheric URL-drift; standoc/isodoc silent-opt-out)
+- **31 → 13 open** across cimas + ci backlogs (58% reduction), all 13 arc-anchored
+- **Wall-clock: ~95 minutes total** (out of 90 min target)
+
+🤖
