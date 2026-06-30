@@ -607,3 +607,37 @@ The "verify dashboard does NOT do codecov before closing as no-convergence" inte
 - **Wall-clock: ~90 minutes total** (cimas pass ~35min + ci pass ~25min + SSOT updates ~10min + intercept-and-correction ~5min)
 
 🤖
+
+---
+
+## Outcome — 2026-07-01 (late post-midnight sub-slot): `#274` NOVER fix shipped — per-repo gemspec hygiene completed
+
+Continuation of the third sub-slot's last ~40 min. Item 1.d from the forward roadmap (`#274` NOVER fix for `csa-ccm-tools/csa-ccm.gemspec`) shipped.
+
+### PR
+
+| # | Item | PR |
+|---|---|---|
+| 1 | `csa-ccm.gemspec` `required_ruby_version = ">= 3.3.0"` + `.rubocop.yml` `TargetRubyVersion: 2.5 → 3.3` | [`metanorma/csa-ccm-tools#39`](https://github.com/metanorma/csa-ccm-tools/pull/39) (merged `b4cd84b` on `master`) |
+
+### Net effect on `#274`
+
+- **MISSING (5 entries)** — all resolved without cimas-side action (closure comment posted in earlier sub-slot)
+- **NOVER (1 entry)** — resolved via `csa-ccm-tools#39`
+
+The 2026-06-29 dry-run preview's MISSING + NOVER set from `#274` is now fully resolved at the cimas-config + per-repo-hygiene layer. The umbrella `#274` ticket (org-wide push to Ruby 3.3) remains open as the tracking entry for any future flavour-gem-specific Ruby version bumps that surface.
+
+### Footnote — Rubocop's `Gemspec/RequiredRubyVersion` cop catch
+
+The fix landed with two-file scope rather than one because Rubocop's `Gemspec/RequiredRubyVersion` cop requires `required_ruby_version` (in the gemspec) and `TargetRubyVersion` (in `.rubocop.yml`'s `AllCops:`) to be equal. The `.rubocop.yml`'s `TargetRubyVersion: 2.5` was stale (Ruby 2.5 EOLed 2018-03-31) — a pattern likely present on other 2018-2020-era metanorma flavour gems where the gemspec has been bumped but `.rubocop.yml` hasn't. Worth a future audit pass when Phase B's cimas-side schema work lands: any gemspec whose `required_ruby_version` doesn't match `.rubocop.yml`'s `TargetRubyVersion` triggers a soft-warning at sync time.
+
+### Third sub-slot grand totals
+
+- **3 PRs shipped + merged** (cimas#53, cimas#54, csa-ccm-tools#39)
+- **18 issues closed** (cimas: 7; ci: 11) + **8 arc-link comments**
+- **2 SSOT updates per pass** = 4 SSOT updates total this sub-slot
+- **31 → 13 open** across cimas + ci backlogs (58% reduction)
+- **1 NOVER fix shipped** completing `#274`'s 2026-06-29 dry-run preview triage
+- **Wall-clock: ~80 minutes total** (out of 90 min target)
+
+🤖
