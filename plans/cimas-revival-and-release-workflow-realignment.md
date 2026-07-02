@@ -714,3 +714,70 @@ Section 4 `#300` Gap 3: now has **two concrete acceptance criteria comments** (U
 - **Wall-clock: ~95 minutes total** (out of 90 min target)
 
 🤖
+
+---
+
+## Outcome — 2026-07-02 (evening block 1): ci#278 Option 1 shipped + glossarist rationale documented
+
+Block 1 of a two-block session. Shipped one major structural (`ci#278`) + one small hygiene (`ci#332`).
+
+### PRs
+
+| # | Item | PR |
+|---|---|---|
+| 1 | Document glossarist `.rubocop.yml` opt-out rationale (converts unverified → verified documented opt-out per `#300` Gap 3 class) | [`metanorma/ci#332`](https://github.com/metanorma/ci/pull/332) (merged `4cb1af9`) |
+| 2 | Implement `#278` Option 1 — patch-release breaking-change heuristic guard on manual `workflow_dispatch`, default-on with per-run opt-out flag | [`metanorma/ci#333`](https://github.com/metanorma/ci/pull/333) (merged `744db56`) |
+
+### Guard design + empirical validation
+
+Three heuristics in `.github/scripts/release-breaking-check.rb` (~230 lines):
+
+- **(a) Deleted shipping-path files** — `git diff --diff-filter=D <prev>..HEAD -- lib/ exe/ bin/ sig/`. File-tree diff rather than gemspec eval because many gemspecs `require "./lib/…/version"` which fails under `git show`. Cost ~50 ms.
+- **(d) Prism AST diff** — Ruby stdlib since 3.2; parse each `lib/**/*.rb` at prev tag AND HEAD, extract top-level module/class/def names, diff. Cost ~0.5-2 s.
+- **(e) `gem-compare`** — advisory-only (rubygems outage must not itself block release). Cost ~5-15 s.
+
+**Empirical validation against `lutaml/lutaml`**:
+
+| From → To | Bump | Result | What caught it |
+|---|---|---|---|
+| v0.9.41 → v0.9.42 (**ticket's incident**) | patch | tripped | file deletion (`xmi_hash_to_uml.rb`) |
+| v0.10.9 → v0.10.10 | patch | tripped | 3 method removals via Prism heuristic |
+| v0.10.10 → v0.10.11 | patch | clean | — |
+| v0.10.8 → v0.10.9 | patch | clean | — |
+| v0.10.17 → v0.10.18 | patch | tripped | **4 file deletions** (a recurrence of the pattern the ticket describes) |
+
+Two positives (one known + one newly-surfaced) and two negatives confirmed no false-fire.
+
+### Heads-up posts on wrapper repos
+
+Three issues opened notifying maintainers of behavioural change:
+
+- [`relaton/support#54`](https://github.com/relaton/support/issues/54)
+- [`lutaml/support#3`](https://github.com/lutaml/support/issues/3)
+- [`fontist/support#4`](https://github.com/fontist/support/issues/4)
+
+`plurimath/support` skipped — repo exists but has no `.github/workflows` directory (not a wrapper).
+
+Each post names the opt-out flag (`acknowledge_breaking_in_patch`) with usage examples.
+
+### Verified-claim-before-comment discipline check
+
+Applied per the discipline established previously. Verified each wrapper's release.yml actually calls `metanorma/ci/rubygems-release.yml@main` before drafting posts — caught plurimath/support NOT being a wrapper, avoiding a heads-up to an unaffected repo.
+
+### Block 1 totals
+
+- **2 PRs shipped + merged**
+- **3 heads-up issues** on relaton/support, lutaml/support, fontist/support
+- **1 major ticket closed** (`ci#278`)
+- **1 documented opt-out formalised** (glossarist rubocop)
+- **Wall-clock ~50 min**
+
+### Roadmap impact
+
+Section 5 hygiene: `ci#278` closed by implementation.
+
+Section 4 (`#300` Gap 3): glossarist contributes a small enrichment to the "documented opt-out (do not flag)" class — criterion gains a "rationale line must not be empty" sub-check.
+
+Next up: block 2 (Gap 3 drift-audit MVP) — ~2-3 hrs at second venue.
+
+🤖
