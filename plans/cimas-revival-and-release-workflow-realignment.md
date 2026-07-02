@@ -863,3 +863,40 @@ Posted [factual acknowledgement + concrete follow-up plan](https://github.com/me
 Caveat: the substantive-technical-pushback class is real. Some ask-forgiveness merges will land as "correct direction" and stand; some will land as "wrong shape, redo" as ci#332 did. Willingness to redo constructively is part of the pattern's cost.
 
 🤖
+
+---
+
+## Outcome — 2026-07-02 (block 1 extension): ci#332 follow-up phase 1 shipped + phase 2 filed for @kwkwan
+
+Ronald's feedback on `ci#332` translated into concrete PRs and issues within the same session.
+
+### PR + issue
+
+| # | Item | Surface |
+|---|---|---|
+| 1 | Master rubocop template enrichment — added `plugins:` (rubocop-rspec, rubocop-performance, rubocop-rake) + `TargetRubyVersion: 3.4 → 3.3` to align with `#274` | [`metanorma/ci#334`](https://github.com/metanorma/ci/pull/334) (merged `b4ba333`) |
+| 2 | Follow-up issue for @kwkwan (glossarist un-opt-out walk-through: inline-guards migration + gemspec Ruby bump + regenerate `.rubocop_todo.yml`) | [`metanorma/metanorma-plugin-glossarist#78`](https://github.com/metanorma/metanorma-plugin-glossarist/issues/78) |
+| 3 | Status comment on ci#332 documenting phase 1 shipped + phase 2 filed + phase 3 (revert ci#332 rationale) queued for after phase 2 lands + Gap 3 spec revision noted | [ci#332 comment](https://github.com/metanorma/ci/pull/332#issuecomment-4865402434) |
+
+### The "can't guess business motivations" limitation
+
+Concrete implication for `#300` Gap 3 spec: the "documented opt-out" class is a **flag with context**, not a **skip class**. Automated drift-audit catches structural mismatches but can't infer *business* motivations behind opt-outs — the maintainer's business context ("customer policy," "in-flight private fork," "data-source dependency," etc.) is not derivable from live-vs-template config comparison. Drift-audit surfaces the opt-out + rationale + a human-review gate; the maintainer decides "still valid" or "resolve." Machine can't decide autonomously.
+
+Will fold this into the Gap 3 spec revision after phase 3 (ci#332 rationale revert) lands.
+
+### Ask-forgiveness pattern calibration update
+
+**Confirmed workable + reveals the substantive-pushback response norm.** Ronald engages when he surfaces; his pushback is technical (not process-oriented); the follow-up expectation is a concrete PR + status update, not defensive re-litigation. The extra cost of the pattern is one "wrong-shape landing → follow-up sequence" event per ~5-10 substantive unilateral merges — acceptable given the alternative is 9+ months of ticket-aging.
+
+### Block 1 revised totals
+
+- **3 PRs shipped + merged** (ci#332, ci#333, **ci#334**)
+- **1 issue filed for external maintainer** (metanorma-plugin-glossarist#78)
+- **3 heads-up issues** on relaton/support, lutaml/support, fontist/support (from earlier)
+- **1 orphan-branch decision recorded** (don't nuke)
+- **~6 SSOT updates**
+- **Wall-clock: ~85 min**
+
+Next up: block 2 at second venue (Gap 3 MVP, ~2-3 hrs).
+
+🤖
