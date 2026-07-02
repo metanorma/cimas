@@ -781,3 +781,47 @@ Section 4 (`#300` Gap 3): glossarist contributes a small enrichment to the "docu
 Next up: block 2 (Gap 3 drift-audit MVP) — ~2-3 hrs at second venue.
 
 🤖
+
+---
+
+## Decision — 2026-07-02 (block 1 tail): don't mass-nuke orphan cimas branches
+
+Section 5 hygiene sweep of the 5 core flavour gems surfaced ~15-20 orphan `cimas/*` and `cimas-sync-*` branches accumulated across 2021-2026. Sample from the 5 repos:
+
+| Repo | Total cimas-prefix branches | MERGED-PR (safe to delete) | Open PR | No PR |
+|---|---|---|---|---|
+| `isodoc` | 3 | 2 | 0 | 1 (from 2021) |
+| `metanorma-cli` | 5 | 0 | 2 (active) | 3 (2 pre-2024, 1 recent) |
+| `metanorma-standoc` | 4 | 3 | 0 | 1 (2026-06 recent) |
+| `metanorma-bsi` | 5 | 4 | 0 | 1 (identical-to-main) |
+| `metanorma-nist` | 4 | 3 | 0 | 1 (identical-to-main) |
+
+Total across the 5: 21 branches. 12 have merged PRs (safe to delete mechanically). 2 have open PRs (active work, do not touch). 7 have no PR — a mix of 2021-2023 stragglers and 2026-06 wave residue that failed to open a PR (likely from the pre-`cimas#49` `-m`-as-title bug that produced HTTP 422 during wave-PR creation).
+
+Extrapolating: possibly 200+ orphan branches across the 187-repo cimas.yml scope.
+
+### Decision
+
+**Do not mass-nuke the orphans.** Reasoning:
+
+1. **None have been externally commented on.** No maintainer has raised the branch-list noise as a blocker.
+2. **Risk of mass-delete misfire exceeds benefit.** A batched force-delete across 200+ branches on 187 repos has non-zero risk of catching something meaningful.
+3. **`cimas cleanup-merged-prs` ([`cimas#47`](https://github.com/metanorma/cimas/pull/47)) handles the MERGED-PR class mechanically.** When we do run a cleanup pass, we run that subcommand rather than a hand-rolled loop.
+4. **The wave-management surface is moving forward** via `#300` Gap 4's `--supersede-stale` and Gap 4 full's merge-prs direction. Once those mature, they naturally reduce orphan creation at the source.
+
+### What this means going forward
+
+- **Don't propose or execute a mass-nuke of orphan branches** unless (a) a maintainer asks, (b) a branch is actively causing a problem, or (c) `cimas cleanup-merged-prs` is being run as part of a targeted post-wave sweep.
+- **Ignore old cimas branches by default.** They are inert.
+- If a future audit surfaces the same finding, **link back to this decision** rather than re-litigating.
+
+### Was the sweep still worth it?
+
+Yes — because it also confirmed:
+- **All 5 core flavour gems are current on their appropriate release template** (rubygems for isodoc/cli/standoc, github-packages for bsi/nist via `release_github_packages.yml`). The "25 wave-PR creation failures" list from the 2026-06-19 wave is substantially stale.
+- **bsi/nist's cimas.yml entries correctly route to `release_github_packages.yml`** — the 2019 privatisation is fully reflected in config.
+- `cimas-sync-2026-06-29` branches on bsi/nist show `vs_main=identical` — the June 29 wave produced no actual change on those repos (already at target).
+
+Section 5 (Hygiene cleanup) status update: the 25-wave-PR-creation-failures item is likely closer to 5-10 real failures now. A future dedicated Section 5 pass should re-derive the failure list rather than trust the 2026-06-19 snapshot.
+
+🤖
