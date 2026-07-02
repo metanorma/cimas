@@ -938,3 +938,45 @@ Cross-linked with the 2026-06-16 companion memory covering Ronald's code-style p
 Ronald engaging on ci#332 → substantive technical feedback → phase 1 shipped (ci#334) → phase 2 filed for @kwkwan (glossarist#78) → phase 3+4 queued → Gap 3 spec sharpened → **AND** durable operating-rule update baked into memory. One engagement event, one turn of the follow-up sequence, and the arc's default AI behaviour is upgraded for all future extraneous-PR reviews. That's the compounding shape of ask-forgiveness done well: each engagement doesn't just close one ticket, it strengthens the pattern.
 
 🤖
+
+---
+
+## Outcome — 2026-07-02/03 (block 2): Gap 3 drift-audit MVP shipped + 12/13 findings actioned
+
+Block 2 target — the `#300` Gap 3 drift-audit MVP scanner — shipped in ~35 min, followed by immediate action on the findings it surfaced.
+
+### Shipped
+
+| # | Item | Surface |
+|---|---|---|
+| 1 | **Drift-audit MVP scanner** — 556-line Ruby script implementing 7 failure-mode classes (a/b/c-external/c-internal/d/e.2/e.3). Standalone script under `.github/scripts/cimas-drift-audit.rb`; integration as cimas subcommand is Phase B territory. | [`metanorma/ci#335`](https://github.com/metanorma/ci/pull/335) (merged `29e8add`) |
+| 2 | **First real audit report** posted on `#300` — 156 of 170 clean, 9 errors, 4 warnings, 1 flag | [`#300` comment](https://github.com/metanorma/ci/issues/300#issuecomment-4866395661) |
+| 3 | **8 external transfers stripped** (edoxen, emf2svg-ruby, iev, oscal-ruby, pdfa-iso-32000-2, reeper, vectory, xml-c14n) — each was in a different org after transfer; cimas.yml was silently push-failing. | [`metanorma/ci#336`](https://github.com/metanorma/ci/pull/336) (merged `59cc642`) |
+| 4 | **4 stale-duplicate internal renames stripped** (metanorma-model-m3d, metanorma-model-rsd, mn-samples-mlit, metanorma-ietf-data) — investigation revealed each was a duplicate whose destination already existed in cimas.yml with correct config. Also stripped 3 stale group-membership references. | [`metanorma/ci#337`](https://github.com/metanorma/ci/pull/337) (merged `88ea99b`) |
+
+### Empirical validation of the tool
+
+**Class (c) split validated by empirics.** The Gap 3 spec called out (c) as one class. First-run findings showed BOTH shapes needed different severity: 8 external transfers (error) and 4 internal renames (warning). Split baked into the tool + confirmed by the follow-up PRs where the two classes needed different corrective actions.
+
+**Same-day loop validated.** Audit → strip PR → re-audit → confirmed. Went from 13 findings → 5 → 1 in three PR shipping cycles within ~1 hour.
+
+**Zero silent-drift (e.2) findings across 170 repos.** Independent validation that recent hygiene passes have kept the config-vs-live-state actually aligned.
+
+### Deferrals
+
+MVP explicit deferrals: (e.1) stale-rationale heuristic, coradoc-shape narrative opt-outs, affirm-action mechanism, integration as cimas subcommand (Phase B), automated test suite.
+
+### Remaining unactioned finding
+
+- **`iso-10303` (class d)**: default branch is `mn/main` (not `main`). Unusual — probably deliberate. Deferred pending maintainer confirmation.
+
+### Block 2 grand totals
+
+- **4 PRs shipped + merged**
+- **1 comment attaching real audit report** to `#300`
+- **12 real drift findings actioned** (of 13 surfaced by the audit)
+- **~66 min wall-clock** out of ~2h block budget
+
+Post-block-2 cimas.yml state is the cleanest since the rehabilitation arc began. Future waves' "N failed" reports will now correspond to legitimate current-state issues, not accumulated stale-config noise.
+
+🤖
