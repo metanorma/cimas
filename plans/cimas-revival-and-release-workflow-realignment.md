@@ -900,3 +900,41 @@ Will fold this into the Gap 3 spec revision after phase 3 (ci#332 rationale reve
 Next up: block 2 at second venue (Gap 3 MVP, ~2-3 hrs).
 
 🤖
+
+---
+
+## Outcome — 2026-07-02 (block 1 postscript 2): PR-review rubric memory persistence
+
+Downstream of Ronald's engagement on ci#332 — durable behavioural change wired into the cross-session AI operating rules.
+
+### The rubric
+
+Ronald forwarded his own PR-review rubric for opoudjis to use on extraneous-contributor PRs opoudjis has been called to review:
+
+> Investigate our (branch and/or PR and/or unstaged code) that is contributed and supposed to be a great enhancement on our work. The contributor can easily devolve into hacks or unclean architecture because the contributor may not understand the high-level strict architecture we have. Ensure code cleanliness and OOP and MECE and fully model-driven and open/closed principle, DRY, performance. ultrathink. What else can we improve here in architecture and code? Make sure we have good specs thought out. Do an audit.
+
+opoudjis framed it as a reasonable starting point for extraneous PRs, with the maintainer retaining ad-hoc override authority on any specific PR.
+
+### Persistence wiring
+
+Trigger-stub form (not always-on inline) — the rubric fires only when explicitly asked to review an extraneous PR, so autoloading the full text every session would waste context.
+
+- Canonical memory file: `~/.claude/memory/feedback_pr_review_ronald_rubric.md`
+- Instruction trigger stub: `~/.claude/instructions/pr-review-ronald-rubric.md`
+- `@`-included in `~/.claude/CLAUDE.md` under the GitHub-behaviour block
+
+### Scope
+
+**Applies to**: extraneous-contributor PRs (external contributor, non-trivial change, called on to review). Audit report goes to opoudjis first, never direct PR comment without explicit approval.
+
+**Does NOT apply to**: own PRs (cimas/ci rehabilitation work), team-internal PRs from established maintainers, trivial PRs (dep bumps, typos, single-liners), bulk auto-generated PRs (cimas-sync, dependabot). For those cases the SPIRIT of the rubric applies (cleanliness, DRY, tests) as light checks — not the full audit shape.
+
+### Companion relationship
+
+Cross-linked with the 2026-06-16 companion memory covering Ronald's code-style prompt (write-side, applies when writing code for Ronald-managed repos: cimas, ci, oss-guides). Same principles, different triggers — one for authoring, one for reviewing.
+
+### Meta-observation on the arc
+
+Ronald engaging on ci#332 → substantive technical feedback → phase 1 shipped (ci#334) → phase 2 filed for @kwkwan (glossarist#78) → phase 3+4 queued → Gap 3 spec sharpened → **AND** durable operating-rule update baked into memory. One engagement event, one turn of the follow-up sequence, and the arc's default AI behaviour is upgraded for all future extraneous-PR reviews. That's the compounding shape of ask-forgiveness done well: each engagement doesn't just close one ticket, it strengthens the pattern.
+
+🤖
