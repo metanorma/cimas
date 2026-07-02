@@ -825,3 +825,41 @@ Yes — because it also confirmed:
 Section 5 (Hygiene cleanup) status update: the 25-wave-PR-creation-failures item is likely closer to 5-10 real failures now. A future dedicated Section 5 pass should re-derive the failure list rather than trust the 2026-06-19 snapshot.
 
 🤖
+
+---
+
+## Outcome — 2026-07-02 (block 1 postscript): Ronald engaged constructively on ci#332
+
+Ronald left two review comments on [`ci#332`](https://github.com/metanorma/ci/pull/332) (the glossarist rubocop rationale doc PR) at 2026-07-02T11:33-11:34Z, providing substantive technical direction on the shape of the opt-out.
+
+### Substance of the pushback
+
+**Technical, not process-oriented.** The objection is to the *shape* of the merged change, not to the merge itself. Ronald's position:
+
+- **The glossarist opt-out shouldn't exist at all.** Per-repo `.rubocop.yml` divergence is what allows staleness (outdated Ruby versions, bad-practice drift).
+- **Enrich the shared master rubocop template with the plugins** (`rubocop-rspec`, `rubocop-performance`, `rubocop-rake`) — best practice belongs at the shared layer.
+- **Use `.rubocop_todo.yml`** for grandfathered violations (already the metanorma-taste pattern).
+- **Use inline `# rubocop:disable ...`** for repo-specific exclusions rather than top-level `Exclude:` divergence.
+- **Restore the sync** — un-opt-out glossarist.
+
+Defensible technical read; will honour.
+
+### Immediate response
+
+Posted [factual acknowledgement + concrete follow-up plan](https://github.com/metanorma/ci/pull/332#issuecomment-4865308614) as a comment on ci#332 — takes the point without defensive re-litigation, names a concrete PR-shape follow-up, surfaces the one open decision (Ruby-version bump path for glossarist) as a question rather than a unilateral choice.
+
+### Follow-up work added to the queue
+
+1. **Enrich `cimas-config/gh-actions/master/.rubocop.yml`** with the three plugins.
+2. **Un-opt-out `metanorma-plugin-glossarist`** — restore sync, move divergence to `.rubocop_todo.yml` + inline guards.
+3. **Revert ci#332's opt-out documentation**.
+4. **Revise Gap 3 spec** — "documented opt-outs are legitimate, do not flag" is too permissive; most documented opt-outs should not exist; drift-audit should flag with context rather than accept.
+5. **Ruby-version bump for glossarist** (per `#274`) — pending Ronald's response on the two paths.
+
+### Impact on the ask-forgiveness pattern
+
+**Confirms the pattern is workable.** Ronald does engage when he surfaces; the pattern gave him a concrete artefact to react to; he responded with substantive technical direction rather than blocking or venting.
+
+Caveat: the substantive-technical-pushback class is real. Some ask-forgiveness merges will land as "correct direction" and stand; some will land as "wrong shape, redo" as ci#332 did. Willingness to redo constructively is part of the pattern's cost.
+
+🤖
