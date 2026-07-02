@@ -980,3 +980,55 @@ MVP explicit deferrals: (e.1) stale-rationale heuristic, coradoc-shape narrative
 Post-block-2 cimas.yml state is the cleanest since the rehabilitation arc began. Future waves' "N failed" reports will now correspond to legitimate current-state issues, not accumulated stale-config noise.
 
 🤖
+
+---
+
+## Outcome — 2026-07-03 (block 2 extension): drift-audit MVP → v1 with (e.1) + coradoc-shape
+
+Extension pass following block 2's MVP + strip work. Both explicit MVP deferrals resolved in a focused ~55 min pass.
+
+### Shipped
+
+| # | Item | Surface |
+|---|---|---|
+| 1 | **(e.1) stale-rationale detection** — for glossarist-shape opt-outs, compare live file vs referenced template; if they match, the rationale is contradicted by live state → error (e.1). | [`metanorma/ci#338`](https://github.com/metanorma/ci/pull/338) (merged `45fc74a`) |
+| 2 | **Coradoc-shape narrative opt-outs** — parser extension emitting OptOut for rationale comment blocks in `files:` sections that mention filenames but lack a commented-out file mapping. False-positive filter rejects narrative opt-outs whose mentioned file is already synced. | same PR |
+
+### The 7-class spec is now fully implemented end-to-end
+
+Every failure-mode class from the sharpened Gap 3 spec is detected:
+
+| Class | Detection | Severity |
+|---|---|---|
+| (a) repo deleted | 404 on API probe | error |
+| (b) repo archived | `.archived == true` | warning |
+| (c-external) external transfer | `.full_name` org differs | error |
+| (c-internal) internal rename | `.full_name` name differs, org same | warning |
+| (d) branch drift | `.default_branch` differs from cimas.yml | error |
+| (e.1) stale-rationale | live file matches template referenced in opt-out | error |
+| (e.2) silent template drift | live file differs from claimed-synced template | warning |
+| (e.3) documented opt-out | valid or unverifiable rationale (glossarist or coradoc shape) | flag |
+
+### Empirical validation
+
+- **coradoc** newly surfaces as `(e.3)` narrative-shape ✓
+- **glossarist** stays as `(e.3)` (live file differs from template — correctly classified as real opt-out) ✓
+- **standoc + isodoc** correctly filtered (restoration comments about actively-synced files) ✓
+- **Zero `(e.1)` findings** on current cimas.yml — validates that recent hygiene passes have kept documented opt-outs honest
+
+### The standoc/isodoc conceptual validation
+
+The `(e.1)` detector's canonical test case is the standoc/isodoc drift from 2026-07-01 (`ci#330`). Would have surfaced immediately as `(e.1) error` instead of waiting for a manual audit ~1 month later. That's the tool's structural value proposition made concrete.
+
+### Block 2 revised grand totals
+
+- **5 PRs shipped + merged** across block 2 (MVP scanner + 8-strip + 4-dedupe + extensions + audit-report comment)
+- **12 real drift findings actioned** in same-session detect-and-act loop
+- **Full 7-class spec implemented end-to-end**
+- **~85 min wall-clock** of the ~2h block budget
+
+### The compounding effect
+
+The audit went from proposal → MVP → shipped + actioning findings → full 7-class end-to-end implementation in a single ~2h block. Tool-mediated maintenance: a spec turns into a scanner turns into cleanup turns into a permanent hygiene mechanism.
+
+🤖
