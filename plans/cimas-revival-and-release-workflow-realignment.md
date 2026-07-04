@@ -1032,3 +1032,46 @@ The `(e.1)` detector's canonical test case is the standoc/isodoc drift from 2026
 The audit went from proposal → MVP → shipped + actioning findings → full 7-class end-to-end implementation in a single ~2h block. Tool-mediated maintenance: a spec turns into a scanner turns into cleanup turns into a permanent hygiene mechanism.
 
 🤖
+
+---
+
+## Outcome — 2026-07-04 (evening block, first ~1 hr): #300 Gap 3 close-out + scheduled drift-audit end-to-end + Gap 1 mechanism shipped
+
+Third weekend evening block. Sequence: Gap 3 close-out, scheduled drift-audit, Gap 1. Total ~65 min for what was estimated 6-7 hrs.
+
+### Shipped
+
+| # | Item | Surface |
+|---|---|---|
+| 1 | **`#300` Gap 3 close-out comment** — full 7-class spec substantially done via ci#335+#338; deferrals enumerated | [`#300` comment `4881516777`](https://github.com/metanorma/ci/issues/300#issuecomment-4881516777) |
+| 2 | **Scheduled drift-audit parent ticket** for accountability | [`ci#340`](https://github.com/metanorma/ci/issues/340) |
+| 3 | **Scheduled drift-audit workflow** — weekly Wed 09:00 UTC + workflow_dispatch, PAT for private-repo visibility, tracking-issue-per-label with auto-updated body + comment log | [`ci#341`](https://github.com/metanorma/ci/pull/341) (merged `8801d37`) |
+| 4 | **Auto-created tracking issue** for rolling drift reports | [`ci#342`](https://github.com/metanorma/ci/issues/342) |
+| 5 | **First scheduled-audit finding actioned** — `DGGS2ISO-19170` stripped (class-a deleted repo) | [`ci#343`](https://github.com/metanorma/ci/pull/343) (merged `7fdc9df`) |
+| 6 | **cimas Gap 1 mechanism** — per-repo `with:` block schema + ERB `with_values` wire-up + 8 focused specs | [`cimas#55`](https://github.com/metanorma/cimas/pull/55) (merged `c2ce12c`) |
+
+### Gap 1 mechanism notes
+
+cimas already had `.erb` rendering + a per-repo `template: binding:` hash. Gap 1 added a top-level `with:` key exposed as `with_values` in ERB. Both mechanisms coexist. Bug fix bonus: `Hash#dig` block form silently ignored, returning nil when absent; changed to `|| {}` for type stability.
+
+Deferred per "prove the mechanism, migrate at leisure":
+- Parametric `master/rake.yml.erb` template.
+- Real `metanorma` repo migration with `with: private-fonts: true`.
+- README doc update.
+
+### Scheduled drift-audit detect-and-act loop demonstrated
+
+Within ~35 min of `ci#341` merging: manual dispatch → surfaced false positives (fixed with PAT) → surfaced 2 real errors → actioned 1 via `ci#343`. Next scheduled run (Wed 09:00 UTC) confirms clean state.
+
+### Time calibration
+
+Gap 1 estimated at 4-5 hrs; actual ~22 min. Same 5:1 overestimation ratio as the drift-audit MVP. Systematic pattern; roadmap estimates for script-based / cimas-mechanism changes should be divided by ~5 for actual work of this shape.
+
+### Block totals (so far)
+
+- **5 PRs merged**, **2 issues filed**, **1 comment**
+- **~65 min wall-clock** of the 5-hr slot; ~4 hrs buffer
+
+Next: Gap 4 full.
+
+🤖
