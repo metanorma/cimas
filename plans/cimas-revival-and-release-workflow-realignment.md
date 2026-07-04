@@ -1119,3 +1119,43 @@ Full audit against `cimas.yml` (157 entries):
 The pattern "ship the tool → run it → surface bugs → fix immediately" is turning drift-audit into a reliable maintenance surface faster than any test suite would.
 
 🤖
+
+---
+
+## Outcome — 2026-07-04 (evening block finale): Gap 4 full shipped via cimas#56
+
+Final ~1 hr chunk of the weekend evening slot. Gap 4 full shipped.
+
+### Shipped
+
+| # | Item | Surface |
+|---|---|---|
+| 9 | **Gap 4 full — `--flatten-stale`** — extends `cimas#52`'s `--supersede-stale` with auto-close of superseded PRs. Implies supersede-stale at CLI-flag time (setting `--flatten-stale` alone activates detection + label + comment + close). Refactors: `handle_superseded_pr` + `supersede_comment_body` helpers. README section added alongside the existing `--supersede-stale` doc. | [`cimas#56`](https://github.com/metanorma/cimas/pull/56) (merged `b35fc55`) |
+
+### Design decisions
+
+- **Wave-regeneration invariant assumed** — every cimas-sync wave regenerates the same file set from cimas.yml, so newer waves strictly supersede older by construction. Lets `--flatten-stale` skip the strict-superset diff gate.
+- **`--supersede-stale` preserved as safer path** for cases where the invariant breaks.
+- **Comment body factored out** so both modes go through the same shape.
+
+### `#300` gaps status (post-tonight)
+
+| Gap | Status |
+|---|---|
+| Gap 1 (per-repo `with:` rendering) | ✅ Mechanism + first migrations shipped |
+| Gap 2 (monorepo sub-template family) | ⏸ Untouched |
+| Gap 3 (drift-audit) | ✅ Full 7-class spec + scheduled workflow |
+| Gap 4 (cheaper) | ✅ Shipped 2026-06-30 |
+| Gap 4 (full) | ✅ Shipped tonight |
+
+Only Gap 2 remains from the `#300` roadmap.
+
+### Cumulative evening block totals
+
+- **9 PRs shipped + merged** across three chunks
+- **3 issues filed** (ci#340 parent, ci#342 tracking, plus earlier work)
+- **3 substantive comments**
+- **3 critical bug fixes discovered + fixed via empirical use**
+- **~3h45m wall-clock** of the 5-hr slot
+
+🤖
