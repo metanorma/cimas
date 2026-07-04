@@ -1075,3 +1075,47 @@ Gap 1 estimated at 4-5 hrs; actual ~22 min. Same 5:1 overestimation ratio as the
 Next: Gap 4 full.
 
 🤖
+
+---
+
+## Outcome — 2026-07-04 (evening block continued): Gap 1 migration + two critical drift-audit bug fixes
+
+Continuation of the earlier weekend evening block. After Gap 3 close-out + scheduled drift-audit + cimas#55 mechanism (~65 min), the actual Gap 1 migration shipped alongside two critical bug fixes surfaced by the migration work.
+
+### Shipped
+
+| # | Item | Surface |
+|---|---|---|
+| 7 | **Gap 1 migration** — new parametric `master/rake.yml.erb` template (superset of `inkscape/rake.yml`, byte-identical with empty `with_values`); 3 consumers migrated (metanorma with `with: private-fonts: true`, metanorma-standoc, isodoc); bundled with drift-audit `read_template` path bug fix | [`metanorma/ci#344`](https://github.com/metanorma/ci/pull/344) (merged `90d8107`) |
+| 8 | **drift-audit `.erb` rendering bug fix** — was comparing live files against RAW ERB source (with unrendered `<%= ... %>` tags), producing false-positive (e.2) findings for every `.erb` consumer. Now renders templates using cimas#55's `with_values` shape before comparison | [`metanorma/ci#345`](https://github.com/metanorma/ci/pull/345) (merged `6a64c63`) |
+
+### Two critical drift-audit bugs discovered + fixed
+
+Both surfaced by empirical work in this block. Both were causing (e.2) silent-drift detection to under-report drift silently since the tool shipped:
+
+- **Bug 1**: `read_template` path double-`gh-actions/` — silent nil return, all (e.2) findings suppressed. Fixed in ci#344.
+- **Bug 2**: `.erb` templates not rendered before comparison — every `.erb` consumer would show false-positive DIFF. Fixed in ci#345.
+
+**Meta-observation**: the scheduled workflow's compounding value is now clear beyond maintenance. It's also an ongoing correctness check on the tool itself. Bug 1 was surfaced immediately by the first live workflow run (24 false-positive class-a from PAT scope); Bug 2 came from the Gap 1 migration adding first-of-kind `.erb` consumers.
+
+### Empirical state (post both fixes)
+
+Full audit against `cimas.yml` (157 entries):
+
+- **1 error** (class d): `iso-10303` `mn/main` branch drift (deferred)
+- **242 warnings** (class e.2): legitimate accumulated silent template drift — 55 rubocop, 58 docker, 42 generate, 21 rake, 19 test, 16 release. Needs a maintainer-driven cimas-sync wave.
+- **2 flags** (class e.3): coradoc + glossarist (expected)
+
+### Block totals (evening slot cumulative)
+
+- **8 PRs shipped + merged** across the block
+- **2 issues filed** (ci#340, ci#342)
+- **1 comment** (`#300` Gap 3 close-out)
+- **2 critical bug fixes** on drift-audit
+- **~2h20m wall-clock** of the 5-hr slot
+
+### Compounding value
+
+The pattern "ship the tool → run it → surface bugs → fix immediately" is turning drift-audit into a reliable maintenance surface faster than any test suite would.
+
+🤖
