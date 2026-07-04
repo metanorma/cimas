@@ -26,6 +26,26 @@ repositories:
       .github/workflows/macos.yml: gh-actions/model/macos.yml
       .github/workflows/ubuntu.yml: gh-actions/model/ubuntu.yml
       .github/workflows/windows.yml: gh-actions/model/windows.yml
+  # Fixture for the legacy per-repo ERB binding mechanism (nested under
+  # `template:`). Existing consumers rely on this shape; must stay working.
+  mn-samples-plateau:
+    remote: ssh://git@github.com/metanorma/mn-samples-plateau
+    branch: main
+    files:
+      .github/workflows/docker.yml: gh-actions/samples/private-docker.yml.erb
+    template:
+      binding:
+        flavor: plateau
+  # Fixture for the metanorma/ci#300 Gap 1 `with:` block — a top-level
+  # per-repo key rendered into ERB templates as `with_values`.
+  metanorma:
+    remote: ssh://git@github.com/metanorma/metanorma
+    branch: main
+    files:
+      .github/workflows/rake.yml: gh-actions/master/rake.yml.erb
+    with:
+      private-fonts: true
+      submodules: true
 
 groups:
   converter:

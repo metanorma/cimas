@@ -1,6 +1,6 @@
 module Cimas
   class Repository
-    attr_reader :name, :remote, :branch, :files, :binding
+    attr_reader :name, :remote, :branch, :files, :binding, :with_values
 
     def initialize(name, attributes = {})
       init_from_attributes(name, attributes)
@@ -19,7 +19,18 @@ module Cimas
         @remote = attributes.fetch("remote", nil)
         @branch = attributes.fetch("branch", nil)
         @files = attributes.fetch("files", nil)
-        @binding = attributes.dig("template", "binding") { {} }
+        # Hash#dig doesn't accept a block — the `{ {} }` in the prior
+        # version was silently ignored, so absent `template: binding:`
+        # yielded `nil`. Explicit `|| {}` keeps the type stable (always a
+        # Hash); the sole consumer at `Cli::Command#sync` wraps it in an
+        # OpenStruct where nil and {} behave identically, so this is a
+        # correctness-not-behaviour fix.
+        @binding = attributes.dig("template", "binding") || {}
+        # `with:` is a per-repo top-level hash rendered into ERB templates
+        # as `with_values`. Semantically intended for reusable-workflow
+        # `with:` block inputs (per metanorma/ci#300 Gap 1) but the values
+        # are just a Hash — usable for any parametric rendering.
+        @with_values = attributes.fetch("with", {}) || {}
       end
     end
   end
