@@ -145,7 +145,11 @@ module Cimas
               puts "file #{source_path} => #{target_path}" if verbose
 
               if source_path.end_with? ".erb"
-                template = ERB.new(File.read(source_path))
+                # trim_mode: '-' honours <%- ... -%> and <%- ... -%> trim
+                # markers, so templates can render conditional blocks
+                # cleanly without stray blank lines. Backward-compatible:
+                # templates that don't use the '-' markers are unaffected.
+                template = ERB.new(File.read(source_path), trim_mode: "-")
                 temp_file = Tempfile.new
                 # Legacy `template: binding:` values are exposed as
                 # OpenStruct dot-notation methods (e.g. `<%= flavor %>`).
