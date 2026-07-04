@@ -425,6 +425,47 @@ module Cimas
         # run_cmd("git -C #{repos_path} multi -c add appveyor.yml")
       end
 
+      # Label + comment (+ optionally close) a superseded prior-wave PR.
+      # Called from the open_prs loop for each stale PR detected via
+      # --supersede-stale / --flatten-stale (Gap 4 of metanorma/ci#300).
+      def handle_superseded_pr(github_slug, stale, new_number, new_branch,
+                               flatten:)
+        label = flatten ? "superseded-closed-by-##{new_number}" \
+                        : "superseded-by-##{new_number}"
+        github_client.add_labels_to_an_issue(
+          github_slug, stale.number, [label]
+        )
+        github_client.add_comment(
+          github_slug, stale.number,
+          supersede_comment_body(new_number, new_branch, flatten: flatten)
+        )
+        if flatten
+          github_client.close_pull_request(github_slug, stale.number)
+          puts "  flattened #{github_slug}##{stale.number} " \
+               "(labelled + commented + closed)"
+        else
+          puts "  superseded #{github_slug}##{stale.number} " \
+               "(labelled + commented)"
+        end
+      end
+
+      def supersede_comment_body(new_number, new_branch, flatten:)
+        if flatten
+          "Auto-closed as superseded by ##{new_number} from a later " \
+            "cimas-sync wave (`#{new_branch}`). If part of this PR's " \
+            "content should have been preserved before flattening, " \
+            "rebase this branch elsewhere and reopen. " \
+            "(--flatten-stale, metanorma/ci#300 Gap 4 full)"
+        else
+          "Superseded by ##{new_number} from a later cimas-sync wave " \
+            "(`#{new_branch}`). This PR was **not auto-closed** by cimas " \
+            "— the reviewer keeps authority over the close decision. " \
+            "Close after merging ##{new_number}, or rebase this branch " \
+            "onto something else if part of its content should still be " \
+            "preserved. (metanorma/ci#300 Gap 4)"
+        end
+      end
+
       def git_remote_to_github_name(remote)
         remote.match(/github.com\/(.*)/)[1]
       end
@@ -538,21 +579,21 @@ module Cimas
 
               github_client.add_labels_to_an_issue(github_slug, number, ['automerge']) if add_auto_merge_label
 
-              # Label-and-comment-but-don't-close the superseded PRs (Gap 4 cheaper).
+              # Label-and-comment (--supersede-stale, Gap 4 cheaper) OR
+              # label-and-comment-and-close (--flatten-stale, Gap 4 full).
+              # The flatten-stale path auto-closes the superseded PRs on the
+              # assumption that every cimas-sync wave regenerates the same
+              # files from cimas.yml, so a newer wave strictly supersedes
+              # any older wave's PR on the same repo.
               stale_prs.each do |stale|
                 begin
-                  github_client.add_labels_to_an_issue(github_slug, stale.number, ["superseded-by-##{number}"])
-                  github_client.add_comment(
-                    github_slug,
-                    stale.number,
-                    "Superseded by ##{number} from a later cimas-sync wave (`#{branch}`). " \
-                    "This PR was **not auto-closed** by cimas — the reviewer keeps authority over the close decision. " \
-                    "Close after merging ##{number}, or rebase this branch onto something else if part of its content should still be preserved. " \
-                    "(metanorma/ci#300 Gap 4)"
+                  handle_superseded_pr(
+                    github_slug, stale, number, branch,
+                    flatten: options['flatten_stale'] == true,
                   )
-                  puts "  superseded #{github_slug}\##{stale.number} (labelled + commented)"
                 rescue Octokit::Error => e
-                  puts "  [WARNING] could not label/comment supersede on #{github_slug}\##{stale.number}: #{e.message}"
+                  puts "  [WARNING] could not process supersede on " \
+                       "#{github_slug}\##{stale.number}: #{e.message}"
                 end
               end
 

@@ -195,6 +195,11 @@ subcommands = {
     opts.on("--supersede-stale", "When opening a PR, detect any pre-existing open PRs on the same repo whose head branch starts with 'cimas-sync-' (i.e. previous wave PRs that never merged), label them 'superseded-by-#N' (where N is the new PR number), and post a comment linking the new PR. Does NOT auto-close the old PRs — the reviewer keeps authority over the close decision. The new PR's body is prepended with a 'Supersedes #X, #Y' line. See metanorma/ci#300 Gap 4.") do |_|
       options['supersede_stale'] = true
     end
+
+    opts.on("--flatten-stale", "Gap 4 full: like --supersede-stale, but ALSO auto-closes the superseded PRs. Implies --supersede-stale. Use when confident the new wave's content strictly supersedes the older waves' (the standard cimas-sync-* case, since every wave regenerates the same files from cimas.yml). Superseded PRs get labelled 'superseded-closed-by-#N', a comment noting auto-closure, and are closed. See metanorma/ci#300 Gap 4 full.") do |_|
+      options['flatten_stale'] = true
+      options['supersede_stale'] = true # flatten implies supersede
+    end
   end,
   'for-each' => OptionParser.new do |opts|
     opts.banner = "Usage: cimas sync [options]"
