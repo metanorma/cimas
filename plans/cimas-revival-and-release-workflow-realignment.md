@@ -1159,3 +1159,35 @@ Only Gap 2 remains from the `#300` roadmap.
 - **~3h45m wall-clock** of the 5-hr slot
 
 🤖
+
+---
+
+## Outcome — 2026-07-05 (post-midnight ~15 min): #300 Gap 2 shipped + all gaps now closed end-to-end
+
+Post-break resumption. Gap 2 shipped in ~15 min.
+
+### Shipped
+
+| # | Item | Surface |
+|---|---|---|
+| 10 | **`#300` Gap 2 — monorepo-per-gem template family** — new shared reusable `metanorma/ci/.github/workflows/monorepo-per-gem-rake.yml` (promoted from pubid's local fork, byte-identical); new cimas template `cimas-config/gh-actions/monorepo/rake.yml.erb`; re-add `pubid` to cimas.yml resolving the PENDING-READD block | [`metanorma/ci#346`](https://github.com/metanorma/ci/pull/346) (merged `ae6ec51`) |
+
+### Design decisions
+
+- **Named for the pattern, not the consumer** — `monorepo-per-gem` (each gem has its own Gemfile) distinguishes from existing `monorepo-rake.yml` (shared Gemfile). Pattern-name survives if pubid renamed.
+- **Promoted local fork to shared reusable** rather than enriching the existing shared `generic-rake.yml` — investigation showed pubid's local adds monorepo/gem_directory/gem_name but LACKS the metanorma-flavour features (submodules, setup-tools, private-fonts, choco-cache) that shared generic-rake carries. Folding would bloat both consumers.
+- **7 optional `with:` inputs** in the cimas template matching monorepo-per-gem-rake.yml's input surface.
+
+### `#300` all gaps closed end-to-end
+
+| Gap | Status | Shipped |
+|---|---|---|
+| Gap 1 | ✅ | cimas#55, ci#344 |
+| Gap 2 | ✅ | ci#346 (this) |
+| Gap 3 | ✅ | ci#335, #338, #341, #344, #345 |
+| Gap 4 (cheaper) | ✅ | cimas#52 |
+| Gap 4 (full) | ✅ | cimas#56 |
+
+The cimas rehabilitation roadmap's `#300` chapter is done. Next: run the sweep to clear the 242 accumulated drift findings.
+
+🤖
