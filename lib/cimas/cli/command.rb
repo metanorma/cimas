@@ -147,7 +147,16 @@ module Cimas
               if source_path.end_with? ".erb"
                 template = ERB.new(File.read(source_path))
                 temp_file = Tempfile.new
-                params = OpenStruct.new(repo.binding).instance_eval { binding }
+                # Legacy `template: binding:` values are exposed as
+                # OpenStruct dot-notation methods (e.g. `<%= flavor %>`).
+                # The `with:` block (metanorma/ci#300 Gap 1) is exposed
+                # as `with_values` — a Hash — so ERB templates can access
+                # keys that aren't valid Ruby identifiers (e.g. `private-fonts`)
+                # via `<%= with_values['private-fonts'] %>`.
+                erb_context = repo.binding.merge(
+                  "with_values" => repo.with_values,
+                )
+                params = OpenStruct.new(erb_context).instance_eval { binding }
                 temp_file.puts(template.result(params))
                 temp_file.flush
                 copy_file(temp_file, target_path)
