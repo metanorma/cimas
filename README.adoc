@@ -315,6 +315,31 @@ A future PR may layer a strict-superset diff gate on top (only supersede when th
 
 A more elegant single-branch-per-repo alternative (rebase the existing `cimas-sync` branch in-place rather than opening new PRs) is noted in `metanorma/ci#300` as a possible Phase-B candidate — bigger mental-model shift, defer until the revival settles.
 
+===== `--flatten-stale` flag (Gap 4 full, implemented 2026-07-04)
+
+`--flatten-stale` is the full Gap 4 shape: same detection as `--supersede-stale` but **also auto-closes the superseded PRs**. Implies `--supersede-stale` (setting `--flatten-stale` alone activates both detection AND auto-close).
+
+Use this when you're confident the new wave's content strictly supersedes the older waves' — which is the standard case for cimas-sync waves, since every wave regenerates the same file set from `cimas.yml`. If the older PR contained content that should be preserved (e.g. a mid-wave hand-edit), rebase that branch elsewhere and reopen before running the new wave.
+
+Behavioural delta vs `--supersede-stale`:
+
+- Superseded PRs get labelled `superseded-closed-by-#N` (instead of `superseded-by-#N`).
+- The comment on each superseded PR names auto-closure and points at the new PR.
+- Each superseded PR is closed via `github_client.close_pull_request`.
+
+[source,sh]
+----
+cimas open-prs --flatten-stale \
+  -r ~/src/cimas-wd-2026-06-29 \
+  -f cimas.yml \
+  -b cimas-sync-2026-06-29 \
+  -m "Cimas sync 2026-06-29: ..." \
+  --body-file /tmp/wave-body.md \
+  -g processor
+----
+
+The strict-superset diff gate mentioned above for `--supersede-stale`'s follow-up is orthogonal to `--flatten-stale` — the flatten variant assumes the wave-regeneration invariant rather than checking it per-PR. If the invariant is broken (e.g. a wave that intentionally covers a narrower subset of files), stick with `--supersede-stale` and close manually.
+
 ==== `cimas for-each`
 
 The `for-each` sub-command allow to execute arbitrary shell command for each repo
