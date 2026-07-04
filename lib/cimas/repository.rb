@@ -18,7 +18,12 @@ module Cimas
 
         @remote = attributes.fetch("remote", nil)
         @branch = attributes.fetch("branch", nil)
-        @files = attributes.fetch("files", nil)
+        # `files:` in cimas.yml is typically a Hash (`local_path: template_path`),
+        # but some entries use `files: []` (a YAML empty Array) to signal
+        # "no sync mappings — track the repo but don't touch any file."
+        # Normalise both shapes to a Hash so downstream `#files.keys` works.
+        raw_files = attributes.fetch("files", nil)
+        @files = raw_files.is_a?(Array) ? {} : (raw_files || {})
         # Hash#dig doesn't accept a block — the `{ {} }` in the prior
         # version was silently ignored, so absent `template: binding:`
         # yielded `nil`. Explicit `|| {}` keeps the type stable (always a
