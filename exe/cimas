@@ -282,6 +282,10 @@ subcommands = {
     opts.on("--push-after", "After detecting + staging orphan deletions, commit + force-push the cleanup branch to each repo's remote. Without this flag the deletions are staged locally only (for inspection / manual push).") do |_|
       options['cleanup_push_after'] = true
     end
+
+    opts.on("--only-target=PATH1,PATH2,PATHX", Array, "Narrow the sweep to specific target paths (comma-separated, no spaces). Files at other target paths are left alone even if orphaned. Use to scope a cleanup wave to one class of orphan (e.g. --only-target=.github/workflows/generate.yml for the ci#347 docker-only cleanup).") do |targets|
+      options['cleanup_only_targets'] = targets
+    end
   end,
   'release-preflight' => OptionParser.new do |opts|
     opts.banner = "Usage: cimas release-preflight --repo NAME [options]"
