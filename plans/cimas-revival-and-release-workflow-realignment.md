@@ -1238,6 +1238,7 @@ The sweep is the first end-to-end exercise of the full `#300`-shaped tool loop o
 - **Template starter files preserved** — `common/`, `templates/`, `default/` paths under `mn-templates-*` + `metanorma-cli` are downstream user-project scaffolds, not repo-own-CI; untouched.
 - **Item 3 verified already met** — private-docs group members all map to `private-docker.yml.erb` or `private-fonts.yml.erb`, neither of which has a deploy step. Confirmed on live `mn-samples-bsi/.github/workflows/docker.yml` (build job only).
 - **40 doc-repo wave PRs handled** — 31 closed with `--delete-branch` (addresses both the mailbox burst grievance AND the follow-up complaint about orphaned branches); 9 had already merged before the close-loop reached them (their `generate.yml` is now landed in-repo and needs a follow-up delete).
+- **CI-failure claim spot-checked**: across the 39 doc-repo wave PRs (excluding one that couldn't be inspected), 24 (~61%) had failing CI checks — dominated by `generate.yml` native-gem-install failures on repos not set up to build native gems. 15 (~39%) passed. Validates the docker-only architectural rule as the right correction, not just a peace offering.
 - **cimas#60 shipped** — `options[...]` → `config[...]` + UTF-8 encoding fixes, surfaced by the running open-prs invocation and fixed in-flight.
 
 ### Follow-ups queued
