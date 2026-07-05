@@ -775,6 +775,194 @@ module Cimas
         end
       end
 
+      # Sibling of `cleanup_merged_prs` for the closed-not-merged case.
+      #
+      # `cleanup_merged_prs` operates on ONE wave branch supplied via `-b`
+      # and asks "did the PR merge? if so, delete the branch." This
+      # subcommand operates on ALL branches whose names match a prefix
+      # (default `cimas-sync-`), across the whole scope, and deletes the
+      # ones whose PR was closed-without-merge — regardless of wave.
+      #
+      # Motivation (metanorma/ci#347 follow-up): when a wave PR is closed
+      # without merge, cleanup-merged-prs leaves the branch alone by design
+      # (someone may want to revisit). But wave PRs closed as superseded
+      # (via `--flatten-stale`) or as unwanted (ci#347) accumulate orphan
+      # branches on remotes. This sweeps them.
+      #
+      # Safety: only deletes branches whose head matches the prefix AND
+      # whose PR is *closed* (state == 'closed', merged_at is nil). Open
+      # PRs and merged PRs are left alone.
+      def cleanup_closed_prs
+        sanity_check
+        prefix = config['cleanup_branch_prefix'] || 'cimas-sync-'
+
+        filtered_repo_names.each do |repo_name|
+          repo = repo_by_name(repo_name)
+          if repo.nil?
+            puts "[WARNING] #{repo_name} not configured, skipping."
+            next
+          end
+
+          github_slug = git_remote_to_github_name(repo.remote)
+
+          # Page all closed PRs; API caps at 100/page but that's fine for
+          # cimas-sync-* accumulation which is bounded by wave count.
+          begin
+            closed_prs = github_client.pull_requests(
+              github_slug,
+              state: 'closed',
+              per_page: 100,
+            )
+          rescue Octokit::Error => e
+            puts "[ERROR] #{github_slug}: PR lookup failed (#{e.class}): #{e.message}"
+            next
+          end
+
+          candidates = closed_prs.select do |pr|
+            pr.head&.ref&.start_with?(prefix) && pr.merged_at.nil?
+          end
+
+          if candidates.empty?
+            puts "[none] #{github_slug}: no closed-not-merged '#{prefix}*' branches"
+            next
+          end
+
+          candidates.each do |pr|
+            branch = pr.head.ref
+            dry_run("Delete branch #{github_slug}:#{branch} (PR ##{pr.number} closed-not-merged #{pr.closed_at})") do
+              begin
+                github_client.delete_branch(github_slug, branch)
+                puts "[deleted] #{github_slug}:#{branch} (PR ##{pr.number})"
+              rescue Octokit::UnprocessableEntity, Octokit::NotFound
+                puts "[absent] #{github_slug}:#{branch} (branch already gone)"
+              rescue Octokit::Error => e
+                puts "[ERROR] #{github_slug}:#{branch} delete failed (#{e.class}): #{e.message}"
+              end
+            end
+          end
+        end
+      end
+
+      # Inverse of `sync`. Where `sync` writes cimas.yml-mapped files to
+      # each repo's working tree, `cleanup_orphan_files` finds files that
+      # (a) carry the Cimas auto-generated header comment, so they were
+      # written by cimas at some point, and (b) are no longer in the
+      # repo's `files:` mapping, so cimas is no longer regenerating them.
+      # These files are orphans — they only exist because they were
+      # sync'd on a prior config version and never cleaned up.
+      #
+      # Motivation (metanorma/ci#347 follow-up): dropping a file from a
+      # repo's `files:` mapping (e.g. removing `.github/workflows/generate.yml`
+      # from all non-mn-samples-* doc repos, per ci#347's docker-only rule)
+      # stops future regeneration but leaves the existing file in the
+      # repo, where its CI keeps failing. This subcommand purges those.
+      #
+      # Safety: only deletes files whose first ~500 bytes contain the
+      # cimas header marker. Files without the header (custom CI, docs,
+      # sources) are never touched.
+      def cleanup_orphan_files
+        sanity_check
+        branch = push_to_branch
+        message = pr_message
+        push_after = config['cleanup_push_after'] == true
+
+        if push_after && (branch.nil? || branch.empty?)
+          raise OptionParser::MissingArgument, "--push-after requires -b <branch>"
+        end
+        if push_after && (message.nil? || message.empty?)
+          raise OptionParser::MissingArgument, "--push-after requires -m <message>"
+        end
+
+        filtered_repo_names.each do |repo_name|
+          repo = repo_by_name(repo_name)
+          if repo.nil?
+            puts "[WARNING] #{repo_name} not configured, skipping."
+            next
+          end
+
+          repo_dir = File.join(repos_path, repo_name)
+          unless File.exist?(repo_dir)
+            puts "[ERROR] #{repo_name} is missing in #{repos_path}, skipping."
+            next
+          end
+
+          g = Git.open(repo_dir)
+          unless keep_changes
+            g.checkout(repo.branch)
+            g.reset_hard(repo.branch)
+            g.clean(force: true, d: true)
+          end
+
+          mapped_targets = (repo.files || {}).keys.to_set
+          orphans = find_orphan_cimas_files(repo_dir, mapped_targets)
+
+          if orphans.empty?
+            puts "[clean] #{repo_name}"
+            next
+          end
+
+          puts "[#{orphans.size} orphan(s)] #{repo_name}:"
+          orphans.each { |o| puts "  - #{o}" }
+
+          if push_after
+            dry_run("Commit + push deletion of #{orphans.size} orphan(s) in #{repo_name} on #{branch}") do
+              g.branch(branch).delete if g.is_branch?(branch)
+              g.branch(branch).checkout
+              orphans.each { |o| g.remove(o) }
+              g.commit(message)
+              begin
+                g.push('origin', branch, force: true)
+                puts "[pushed] #{repo_name}:#{branch}"
+              rescue Git::FailedError => e
+                puts "[ERROR] #{repo_name}:#{branch} push failed: #{e.message}"
+              end
+            end
+          else
+            # Local-only mode: stage the deletions for the operator to
+            # inspect and push manually. Useful for a review-before-blast
+            # workflow.
+            dry_run("Stage deletion of #{orphans.size} orphan(s) in #{repo_name} (local only, no push)") do
+              orphans.each { |o| g.remove(o) }
+            end
+          end
+        end
+      end
+
+      # Returns paths (repo-relative) of files under `repo_dir` that:
+      #   - are regular files
+      #   - are not inside `.git/`
+      #   - carry the Cimas auto-generated header in the first ~500 bytes
+      #   - do NOT appear in `mapped_targets` (repo's current cimas.yml
+      #     `files:` mapping)
+      #
+      # The 500-byte read window is enough to cover the two-line header
+      # `copy_file` writes ("# Auto-generated by Cimas: Do not edit it
+      # manually!\n# See https://github.com/metanorma/cimas") plus any
+      # leading shebang or comment. Files smaller than 500 bytes read
+      # to EOF without error.
+      def find_orphan_cimas_files(repo_dir, mapped_targets)
+        orphans = []
+        # Force UTF-8 read so non-ASCII bytes don't blow up the header check.
+        Dir.glob(File.join(repo_dir, '**', '*'), File::FNM_DOTMATCH).each do |path|
+          next unless File.file?(path)
+          next if path.include?('/.git/') || path.end_with?('/.git')
+
+          begin
+            first_bytes = File.read(path, 500, encoding: 'UTF-8')
+          rescue ArgumentError, EncodingError
+            # Binary or malformed encoding — skip (cimas only writes text).
+            next
+          rescue SystemCallError
+            next
+          end
+          next unless first_bytes.include?('Auto-generated by Cimas')
+
+          rel_path = path.sub("#{repo_dir}/", '')
+          orphans << rel_path unless mapped_targets.include?(rel_path)
+        end
+        orphans
+      end
+
       # Local maintainer-side preflight that mirrors the GHA preflight job in
       # `metanorma/ci/.github/workflows/rubygems-release.yml`. Runs against a
       # single repo's workspace clone before the maintainer fires the
