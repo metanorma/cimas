@@ -20,6 +20,8 @@ Commonly used command are:
    push :              do push changes to repote server
    open-prs :          do PR for Github with hub utility
    cleanup-merged-prs: delete wave branches whose PR has merged (run after merges land)
+   cleanup-closed-prs: delete wave branches whose PR was closed without merge (org-wide sweep of cimas-sync-*)
+   cleanup-orphan-files: delete files with the Cimas auto-generated header that are no longer in cimas.yml mapping (sync's inverse)
    release-preflight:  local fail-fast checks before firing a release workflow
    for-each :          run command for each repo with conditions
 See 'cimas COMMAND --help' for more information on a specific command.
@@ -233,6 +235,52 @@ subcommands = {
 
     opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
       options['groups'] = groups
+    end
+  end,
+  'cleanup-closed-prs' => OptionParser.new do |opts|
+    opts.banner = "Usage: cimas cleanup-closed-prs [options]"
+
+    opts.on("-r REPOS_PATH", "--repo-path=REPOS_PATH", "Repo root dir path") do |path|
+      options['repos_path'] = Pathname.getwd + path
+    end
+
+    opts.on("-f CONFIG_FILE_PATH", "--config-path=CONFIG_FILE_PATH", "Config file path") do |path|
+      options['config_file_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
+      options['groups'] = groups
+    end
+
+    opts.on("--branch-prefix=PREFIX", "Branch-name prefix to sweep (default: cimas-sync-). All closed-not-merged PRs whose head.ref starts with this prefix have their remote branch deleted.") do |prefix|
+      options['cleanup_branch_prefix'] = prefix
+    end
+  end,
+  'cleanup-orphan-files' => OptionParser.new do |opts|
+    opts.banner = "Usage: cimas cleanup-orphan-files [options]"
+
+    opts.on("-r REPOS_PATH", "--repo-path=REPOS_PATH", "Repo root dir path") do |path|
+      options['repos_path'] = Pathname.getwd + path
+    end
+
+    opts.on("-f CONFIG_FILE_PATH", "--config-path=CONFIG_FILE_PATH", "Config file path") do |path|
+      options['config_file_path'] = validate_config_path(Pathname.getwd + path)
+    end
+
+    opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
+      options['groups'] = groups
+    end
+
+    opts.on("-b BRANCH", "--branch=BRANCH", "Branch to create with the orphan-file deletions (e.g. cleanup-orphans-2026-07-05). Same shape as `-b` on push.") do |branch|
+      options['push_to_branch'] = branch
+    end
+
+    opts.on("-m MESSAGE", "--message=MESSAGE", "Commit message for the cleanup commit.") do |message|
+      options['pr_message'] = message
+    end
+
+    opts.on("--push-after", "After detecting + staging orphan deletions, commit + force-push the cleanup branch to each repo's remote. Without this flag the deletions are staged locally only (for inspection / manual push).") do |_|
+      options['cleanup_push_after'] = true
     end
   end,
   'release-preflight' => OptionParser.new do |opts|
