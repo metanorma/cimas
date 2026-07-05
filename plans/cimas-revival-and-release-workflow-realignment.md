@@ -1305,9 +1305,15 @@ The `--only-target` scope filter emerged from running the broader `cleanup-orpha
 ### Cumulative arc totals (updated end-of-day 2026-07-05)
 
 - **`#300` roadmap**: 10 PRs + all 4 gaps closed end-to-end (unchanged)
-- **cimas correctness fixes**: cimas#57, #58, #60, #61, #62 all merged (5 correctness ships since sweep)
+- **cimas correctness fixes**: cimas#57, #58, #60, #61, #62 all merged; [cimas#63](https://github.com/metanorma/cimas/issues/63) filed (push-precondition follow-up); cimas#15 closed with arc-link comment (drift-audit substantially delivered its intent).
 - **ci#347 remediation**: cimas.yml corrected + 40 doc-repo wave PRs handled + cimas#60 shipped
-- **This session's failed-PR fixes**: 6 non-doc-repo fixes + 2 cimas.yml archive-outs (gb, lapidist) + 1 issue filed (bipm-data-importer#59)
-- **Cleanup wave**: 26 doc repos getting fresh `cleanup-orphans-2026-07-05` PRs to purge the live `generate.yml` files that ci#347 stopped regenerating but didn't purge
+- **This session's failed-PR fixes**: **8 non-doc-repo fixes shipped** — cnccs (orphan rake.yml), ietf-data-importer (VERSION spec semver-regex), csa-ccm-tools (bundler + pry), cimas spec drift, metanorma-registry (mutex_m + bigdecimal), bipm-data-importer (coradoc pin + issue #59), **sts-ruby (rubocop-drift todo regen `4f61060`)**, **suma (rubocop-drift todo regen `548e996`, dropped 193 stale exclusions in the process)** + 2 cimas.yml archive-outs (gb, lapidist) + 1 issue filed
+- **Cleanup wave**: 26 doc repos got fresh `cleanup-orphans-2026-07-05` PRs. **18/26 merged by session end**; 8 open failing on pre-existing docker.yml `build` errors or CodeQL Analyze issues (per-repo maintainer investigation, not template drift).
+- **False-alarm findings**: rfcxml #32 and niso-jats #34 rubocop failures are runner-environment-specific (local rubocop passes clean; todo files already cover the plugin-drift offenses on those two). CI retries should resolve without code changes.
+- **Rubocop-drift pattern captured** for future waves: after ci#334 enriched `master/.rubocop.yml` with `rubocop-rspec` / `rubocop-performance` / `rubocop-rake` plugins (per Ronald's explicit ask on ci#332), gems whose `.rubocop_todo.yml` predates that landing carry stale exclusion sets. Recipe: `bundle exec rubocop --regenerate-todo && bundle exec rubocop`.
+
+### Broader-drift cleanup wave prepped for 2026-07-06 post-release
+
+Broader `cleanup-orphan-files` catalog generated tonight (no `--only-target`): 89 orphan repos, ~130 orphan files across 20+ file types. Turnkey `--only-target=.hound.yml,rake.yml,notify.yml,integration.yml,test.yml` invocation prepared in the pickup file. Deferred until Monday to avoid double-blasting Ronald's mailbox alongside tonight's wave. Deliberately excluded: template scaffolds (`common/` prefix), niche `docker-pres_xml.yml`, long tail (need per-instance investigation).
 
 🤖
