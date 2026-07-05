@@ -102,7 +102,7 @@ RSpec.describe Cimas::Repository do
       )
 
       expect { command.apply_patches(repo_name, repo_dir, git_double) }
-        .to output(/pattern did not match/).to_stdout
+        .to output(/pattern not present in file/).to_stdout
 
       expect(File.read(gemspec_path)).to include('>= 2.7.0')
     end
