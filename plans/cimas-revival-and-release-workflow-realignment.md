@@ -1314,6 +1314,42 @@ The `--only-target` scope filter emerged from running the broader `cleanup-orpha
 
 ### Broader-drift cleanup wave prepped for 2026-07-06 post-release
 
-Broader `cleanup-orphan-files` catalog generated tonight (no `--only-target`): 89 orphan repos, ~130 orphan files across 20+ file types. Turnkey `--only-target=.hound.yml,rake.yml,notify.yml,integration.yml,test.yml` invocation prepared in the pickup file. Deferred until Monday to avoid double-blasting Ronald's mailbox alongside tonight's wave. Deliberately excluded: template scaffolds (`common/` prefix), niche `docker-pres_xml.yml`, long tail (need per-instance investigation).
+Broader `cleanup-orphan-files` catalog generated tonight (no `--only-target`): 89 orphan repos, ~130 orphan files across 20+ file types. Turnkey `--only-target=.hound.yml,rake.yml,notify.yml,integration.yml,test.yml` invocation prepared in the pickup file. Deferred until Monday to avoid double-blasting the mailbox alongside tonight's wave. Deliberately excluded: template scaffolds (`common/` prefix), niche `docker-pres_xml.yml`, long tail (need per-instance investigation).
+
+🤖
+
+---
+
+## Outcome — 2026-07-06 ~12:20: ci#347 reopened for private-vs-public visibility-driven treatment
+
+@ronaldtse posted two follow-up asks on the reopened [ci#347](https://github.com/metanorma/ci/issues/347):
+
+> "Regarding keeping a list of private repos: it should be determined by the repository visibility on the GitHub repository itself."
+>
+> "We need to also distinguish between public document repos vs private document repos."
+
+Both point at the same design gap: cimas.yml's manual `private-docs` group has drifted from actual GitHub visibility, and the public/private axis should be a systematic property picked up at sync time from GitHub's own `.private` flag, not a hand-curated list.
+
+### Audit against actual GitHub visibility (as of 2026-07-06)
+
+- **1 misclassified as private**: `mn-samples-ribose` is in `private-docs` but is public on GitHub.
+- **13 misclassified as public** (mapped to `public-docker.yml`, which includes a deploy-to-GH-Pages job):
+  - `docs` group: ogc-dggs-xmi, eccma-iso-scor-vocab, annotated-express, iso-iec-smart-terms
+  - `iso` group: iso-690, iso-8000-51, iso-8000-100-ed2, iso-8601-1, iso-8601-2, iso-10303-2, iso-19115-3, iso-19626-1, iso-tc184-sc4
+
+### Not an active leak — verified via Pages API
+
+Checked GitHub Pages API for all 13 GitHub-private repos: **all return `status=404`**, i.e. Pages is disabled on every one. The deploy step in `public-docker.yml` explicitly checks Pages-enabled and silently skips when off — private content has never actually been published anywhere. The wrong-template mapping is a **latent** issue, not an active data leak: if someone enables Pages on any of those 13 via the GitHub UI, the deploy job would suddenly go live.
+
+### Direction
+
+**Option B (the visibility-driven design refactor)** — cimas sync fetches `.private` from `gh api repos/<slug>` for each doc repo at sync time and picks the right template automatically; the manual `private-docs` group is removed. Work will happen under the reopened ci#347. Deferred to a subsequent session; not executed here.
+
+Design outline:
+
+1. cimas sync fetches `.private` per doc repo, with per-run caching.
+2. Template selection moves from static `files:` mapping to visibility-conditional: `docker.yml` → `public-docker.yml` if public, `private-docker.yml.erb` if private. cimas.yml declares the logical role; cimas picks the concrete template at sync time.
+3. Remove the `private-docs` group from cimas.yml (mn-samples-* stays grouped for the sample-vs-doc exception).
+4. Next sync after the refactor migrates the 14 mismatched repos automatically.
 
 🤖
