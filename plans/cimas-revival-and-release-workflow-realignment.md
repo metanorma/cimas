@@ -1350,6 +1350,14 @@ Design outline:
 1. cimas sync fetches `.private` per doc repo, with per-run caching.
 2. Template selection moves from static `files:` mapping to visibility-conditional: `docker.yml` → `public-docker.yml` if public, `private-docker.yml.erb` if private. cimas.yml declares the logical role; cimas picks the concrete template at sync time.
 3. Remove the `private-docs` group from cimas.yml (mn-samples-* stays grouped for the sample-vs-doc exception).
-4. Next sync after the refactor migrates the 14 mismatched repos automatically.
+4. Next sync after the refactor migrates the mismatched repos automatically.
+
+### Audit expanded — correction to the initial count
+
+Fuller scan across all 158 cimas.yml repos surfaced **3 additional GitHub-private repos wrongly mapped to `public-docker.yml`** beyond the 13 initially reported: `iso-10303-11`, `iso-19135`, `iso-15926-6`. The last two were also independently flagged by @ronaldtse via `CHANGES_REQUESTED` reviews on their wave PRs (`iso-15926-6#9`, `iso-19135#345`), which have now been closed with branch delete.
+
+Corrected total: **16 GitHub-private doc repos wrongly mapped to `public-docker.yml`**. Latent-leak verification still holds — all 16 return `status=404` on the GitHub Pages API, so no content has been publicly deployed.
+
+@ronaldtse endorsed Option B's direction on the reopened ci#347: *"Reasonable to separate the private docker workflow for documents."* Full follow-up thread on ci#347.
 
 🤖
