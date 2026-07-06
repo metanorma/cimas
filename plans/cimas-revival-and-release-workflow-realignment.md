@@ -1361,3 +1361,43 @@ Corrected total: **16 GitHub-private doc repos wrongly mapped to `public-docker.
 @ronaldtse endorsed Option B's direction on the reopened ci#347: *"Reasonable to separate the private docker workflow for documents."* Full follow-up thread on ci#347.
 
 🤖
+
+---
+
+## Outcome — 2026-07-06 ~13:30-14:20: post-dispatch tripwire reverted
+
+### What was in place
+
+[`metanorma/ci#326`](https://github.com/metanorma/ci/pull/326) (merged 2026-06-30, commit `56bdec5`) added a "verify release-passed dispatch acknowledged downstream" step at the end of `rubygems-release.yml`. The step polled for 90s after firing `release-passed` back to the same repo, and red-failed the CI job if no workflow run appeared. Intent: make silent-fail on missing receivers visible.
+
+### Why it was wrong for this architecture
+
+The release-chain fan-out is orchestrated from `metanorma-cli`: its live `notify.yml` catches `release-passed` → calls `mn-processor-notify.yml` → reads `dependent_repos.env` → dispatches `do-release` at each dependent gem. Dependent gems are *leaves* in this design; they release when metanorma-cli tells them to and don't cascade further. They don't need — and were never intended to have — their own notify.yml receiver.
+
+The tripwire I added assumed the opposite topology (every gem cascades). So it fired on every leaf gem's release and red-failed the CI even though gem-publish had already completed successfully. The tripwire ran *after* the publish step in `rubygems-release.yml`, so it could not prevent a release; it could only add a red CI mark after the fact.
+
+Effect over the six days it was live: every leaf-gem release CI showed red on the tripwire step even though the gem had successfully published to rubygems. The signal was noise.
+
+### Reverts
+
+- **[`metanorma/ci:8de06be`](https://github.com/metanorma/ci/commit/8de06be)** — reverts the tripwire step from `rubygems-release.yml`. Releases go green when gem-publish succeeds.
+- **[`metanorma/ci:132bcfd`](https://github.com/metanorma/ci/commit/132bcfd)** — reverts a same-day cimas.yml change that would have mapped notify.yml to 47 gems. Inert (no cimas sync ran).
+- **[`metanorma/isodoc:a8e3f763`](https://github.com/metanorma/isodoc/commit/a8e3f763)** — deletes a notify.yml file direct-pushed to isodoc live main earlier the same day.
+
+### Evidence that releases were shipping through the tripwire
+
+Both today's isodoc releases and today's metanorma-standoc release published successfully to rubygems despite the red CI:
+
+- `isodoc` v3.6.7 (2026-07-06 04:05 UTC), v3.6.8 (2026-07-06 08:03 UTC)
+- `metanorma-standoc` v3.4.8 (2026-07-06 04:26 UTC)
+
+### Design gap the tripwire tried and failed to catch
+
+`metanorma-cli`'s `dependent_repos.env` is a hand-maintained list. If it drifts — a repo dropped, name mistyped, line commented out by accident — that repo silently stops being triggered on future releases. The tripwire I built could not have caught this: it checked receiver existence on the sender side, not fan-out completion on the orchestrator side. Correct guard shape is:
+
+1. Inside `mn-processor-notify.yml` (or a step called after it), verify each `do-release` dispatch actually produced a workflow run on the target repo.
+2. Alternative: a scheduled workflow that periodically diffs `dependent_repos.env` against the current rubygems state and surfaces drift after the fact.
+
+Design when calm, not during a release.
+
+🤖
