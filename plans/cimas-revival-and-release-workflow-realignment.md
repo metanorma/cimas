@@ -1401,3 +1401,39 @@ Both today's isodoc releases and today's metanorma-standoc release published suc
 Design when calm, not during a release.
 
 🤖
+
+---
+
+## Outcome — 2026-07-07: metanorma-docker runner Ruby pin fixed + Ruby-floor drift audit queued
+
+### What surfaced
+
+metanorma-cli v1.16.8 released successfully to rubygems 2026-07-07 01:03 UTC, but the metanorma-docker `release-tag.yml` workflow that fires on the downstream `release-passed` event failed with `version solving has failed` — bundler tried to install metanorma-cli 1.16.8 (which requires Ruby >= 3.3 per ci#274) into a Ruby 3.2.11 runner and correctly refused.
+
+**Root cause**: the workflow's `ruby/setup-ruby@v1` step pinned `ruby-version: '3.2'`. It never got bumped when ci#274 pushed the org-wide Ruby floor from 3.2 → 3.3. The four Dockerfiles in the same repo (ubuntu, alpine, ruby, windows) were already on 3.3.7 — only the workflow-runner pin was stale.
+
+### Immediate fix
+
+[`metanorma/metanorma-docker:93fc853`](https://github.com/metanorma/metanorma-docker/commit/93fc853) — one-line change, `ruby-version: '3.2'` → `'3.3'` in `.github/workflows/release-tag.yml`. Retriggered v1.16.8 via `workflow_dispatch`.
+
+### Follow-up queued: audit-machinery for Ruby-floor drift class
+
+No automated coverage exists for "runner-side Ruby pins across the org must match the gemspec-declared floor." When ci#274 bumped the floor, gemspecs got updated (via cimas patches machinery), but workflow-runner pins in other repos silently stayed on the old floor until a real release exercised the mismatch. Same could happen again on the next floor bump.
+
+**Where to extend**: the scheduled drift-audit in `metanorma/ci:.github/workflows/cimas-drift-audit.yml` + `metanorma/ci:.github/scripts/cimas-drift-audit.rb`. Add an 8th class to the current 7-class taxonomy.
+
+**What the check does**:
+
+- Walks `.github/workflows/*.yml` across cimas-managed repos + Dockerfiles.
+- Extracts `ruby/setup-ruby@v*` steps → `ruby-version:` value → major.minor.
+- Extracts Dockerfile `FROM ruby:X.Y.Z` lines → major.minor.
+- Compares against a hardcoded `RUBY_FLOOR = '3.3'` constant (with a comment pointing at ci#274; bumped by one-line edit when the floor next moves).
+- Reports findings to [ci#342](https://github.com/metanorma/ci/issues/342) in the same shape as other drift-audit classes.
+
+**What it does NOT do**: no auto-fix; no workflow-blocking; passive schedule-only report. No tripwire shape.
+
+**Estimate**: ~30-60 min actual.
+
+**Related**: [`ci#274`](https://github.com/metanorma/ci/issues/274) (Ruby 3.3 floor), [`ci#341`](https://github.com/metanorma/ci/pull/341) (drift-audit workflow), [`ci#342`](https://github.com/metanorma/ci/issues/342) (rolling tracking issue).
+
+🤖
