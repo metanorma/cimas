@@ -1567,3 +1567,36 @@ Andrew's [`ci#339`](https://github.com/metanorma/ci/pull/339) is deliberately NO
 Wave outcome section to follow immediately below.
 
 🤖
+
+---
+
+## Outcome — 2026-07-08 wave complete
+
+### Sync wave (`cimas-sync-2026-07-08`)
+
+- **58 PRs open**, plus prior stale `cimas-sync-*` PRs auto-closed via `--flatten-stale`. Distributes:
+  - `.rubocop.yml` correction (`.rubocop_todo.yml` as last `inherit_from`, per [`metanorma/ci:a864ed9`](https://github.com/metanorma/ci/commit/a864ed9)) — 54 gems mapping this template got the fix.
+  - `.github/workflows/release.yml` Koonwa fix (explicit `release_command`, per [`metanorma/ci:f994f4c`](https://github.com/metanorma/ci/commit/f994f4c)) — every gem mapping release.yml.
+- 3 "on par" skips (`tex2mn`, `mnconvert`, `bipm-data-outcomes`) — target branch already matched, no PR needed.
+- Sync-step warnings on 2 gems' `ruby_version` patch (`metanorma-plugin-datastruct`, `tex2mn`) — pre-existing, unrelated to templates, non-blocking.
+
+### Cleanup wave (`cleanup-orphans-broader-2026-07-08`)
+
+- **43 PRs open**, **25 prior stale cleanup PRs auto-closed** via `--flatten-stale`. Purges:
+  - `.hound.yml` (Hound defunct since ~2020).
+  - Orphan `.github/workflows/rake.yml` / `notify.yml` / `integration.yml` / `test.yml`.
+- 1 push failure: `sample-ogc-discussion-paper` — write permission gap, non-blocking, skipped.
+
+### CodeQL noise — expected, addressed by pending PR
+
+Sync-wave PRs that touched `release.yml` pick up a `github-advanced-security[bot]` CodeQL comment about the missing top-level `permissions:` block. **Exactly the class [`ci#339`](https://github.com/metanorma/ci/pull/339) fixes** — deferred to the next wave pending review. Paper trail posted on the first-observed instance ([coradoc#248 issuecomment-4905537362](https://github.com/metanorma/coradoc/pull/248#issuecomment-4905537362)); the PR-#339 author was pinged on the PR itself ([issuecomment-4905553442](https://github.com/metanorma/ci/pull/339#issuecomment-4905553442)) with coradoc#248 named as the representative case. Once ci#339 merges, the next wave's distribution retires the finding fleet-wide.
+
+### What ripens next
+
+- **Merge review** on the 101 wave PRs as CI settles. Transient rubocop-drift red-CI expected on gems whose `.rubocop_todo.yml` predates the ci#334 plugin additions (per-gem `bundle exec rubocop --regenerate-todo` recipe from sts-ruby / suma 2026-07-05).
+- [`ci#348`](https://github.com/metanorma/ci/pull/348) — class (f) drift audit awaiting review/merge.
+- [`ci#349`](https://github.com/metanorma/ci/issues/349) — deeper bundle-install fix inside `rubygems-release.yml`, follow-up.
+- [`ci#339`](https://github.com/metanorma/ci/pull/339) — permissions blocks, review-pending, folds into next wave.
+- `cleanup-merged-prs` sweep after this wave's PRs merge.
+
+🤖
