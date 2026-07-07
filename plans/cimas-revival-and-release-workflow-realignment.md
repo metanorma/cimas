@@ -1522,3 +1522,48 @@ Owner has taken the manual v1.16.8 bump personally in this cycle. Sequence for r
 - Adjacent to [`ci#274`](https://github.com/metanorma/ci/issues/274), [`ci#341`](https://github.com/metanorma/ci/pull/341), [`ci#342`](https://github.com/metanorma/ci/issues/342).
 
 🤖
+
+---
+
+## Outcome — 2026-07-08 evening: A/B/C batch shipped + Koonwa fix + pre-wave prep
+
+### What shipped tonight (pre-wave)
+
+**A — Ruby-floor drift audit (class (f) in cimas-drift-audit)**. Extended `metanorma/ci:.github/scripts/cimas-drift-audit.rb` with an 8th class that walks `.github/workflows/*.yml` + `Dockerfile*` across cimas-managed repos, extracts `ruby-version:` from `ruby/setup-ruby@*` steps + matrix lists + `FROM ruby:X.Y.Z` tags, compares against a hardcoded `RUBY_FLOOR = "3.3"` constant. Dynamic `${{ ... }}` refs and reusable-workflow-driven matrices are skipped as unverifiable statically. New `PHASE_5_RUBY_FLOOR_ONLY=1` harness with `LIMIT=N` + `ONLY_REPO=name1,name2` filters. Shipped as [`metanorma/ci#348`](https://github.com/metanorma/ci/pull/348) on branch `feature/drift-audit-ruby-floor`. Full sweep across 155 cimas.yml entries surfaced 24 findings across 9 repos, 146 clean, 0 false positives; findings [posted as a PR comment](https://github.com/metanorma/ci/pull/348#issuecomment-4904433316). Scope is cimas.yml-only; fleet-wide extension (to cover `metanorma-docker` and other non-cimas release-adjacent repos) remains a follow-up.
+
+**B — `release-tag.yml` silent-index touch-fix on suma-docker**. The workflow file had existed since 2026-05-14 but GitHub Actions never indexed it as dispatchable — `gh workflow run` returned 404, and the workflows list only showed `build-push` + `CodeQL`. Fixed via a header-comment addition at [`metanorma/suma-docker:14589ae`](https://github.com/metanorma/suma-docker/commit/14589ae). Verified: workflow now shows state `active`; the header also documents the manual `git tag` fallback used for the v0.3.0 release earlier the same day.
+
+**C — Bulk-merge of the 8 cleanup-orphans-2026-07-05 PRs**. All admin-force-merged with `--delete-branch`. Failing CI on those PRs was pre-existing docker.yml build failures on the doc repos themselves, not regressions from the cleanup (verified against representative runs). PRs: ietf-rfc-3339#7, C-17-Publication#4, iec-iso-jseg-15#11, rfc-divination-cfapi#15, rfc-asciidoc-rfc#42, rfc-asciirfc-minimal#22, iso-19626-1#13, iso-tc184-sc4-directives#11. ci#347 remediation loop now fully closed.
+
+### Discovery + fix — Koonwa's `release.yml` gap
+
+While reviewing [`ci#339`](https://github.com/metanorma/ci/pull/339) (least-privilege `permissions:` on six master caller templates — clean, uncontroversial; deferred to the next wave pending review), a [prior comment from @kwkwan on metanorma-plugin-lutaml#285](https://github.com/metanorma/metanorma-plugin-lutaml/pull/285#discussion_r3517110963) surfaced: `bundle install is needed when running do-release. Otherwise, the build will fail.`
+
+Root cause: [`ci#314`](https://github.com/metanorma/ci/issues/314) deprecated `bundler_cache` (hardcoded to `false` in the release job, after the metanorma-cli v1.16.6 `Bundler::GemNotFound: metanorma-nist` incident), but the master `release.yml` template still relied on the implicit `bundle install` that `ruby/setup-ruby`'s `bundler-cache: true` used to provide. The reusable's default `release_command: bundle exec rake release` then fires against uninstalled gems and fails. Koonwa's live workflow carried a local `release_command: | bundle install\n bundle exec rake release` override; the closed sync PR #285 would have erased it on next resync. **This is a specific instance of the release-chain observability gap** logged in the tripwire-lesson section — same class, distinct undiscovered gotcha, high blast radius (every gem using `release.yml` would have broken on next release).
+
+**Fixed at [`metanorma/ci:f994f4c`](https://github.com/metanorma/ci/commit/f994f4c)** — direct-push to main (matches the `a864ed9` / `949efb2` precedent for template/cimas.yml corrections). Master `release.yml` now passes an explicit `release_command: | bundle install\n bundle exec rake release` with a rationale comment naming ci#314 and the surfacing. Redistributes on the 2026-07-08 wave.
+
+A [threaded reply](https://github.com/metanorma/metanorma-plugin-lutaml/pull/285#discussion_r3537078657) on Koonwa's comment credits the finding, explains root cause + fix, and links the follow-up ticket.
+
+### Queued follow-up — [`metanorma/ci#349`](https://github.com/metanorma/ci/issues/349)
+
+Filed to track the deeper fix: run `bundle install` inside `rubygems-release.yml`'s release job itself so callers don't need to remember the two-liner. Two candidate shapes documented:
+
+- **A** — Explicit `bundle install` step in the release job before the step running `release_command`. Simple, safe; `release_command` stays user-controlled.
+- **B** — Update the default of `release_command` from `bundle exec rake release` to `bundle install && bundle exec rake release`. Backwards-compatible; slightly less clean semantically since the input's name suggests just "the release command."
+
+Non-goals: not re-enabling `bundler_cache` in any form (the ci#314 remediation stands); not touching the preflight logic (separate job by design).
+
+### Pre-wave state — about to fire
+
+Both `metanorma/ci` at `f994f4c` (Koonwa fix on main) and the held rubocop template change `a864ed9` are ready for distribution. Broader-orphan catalog prepped from 2026-07-05. The wave carries:
+
+1. **Rubocop template correction** (`a864ed9`) — appended `.rubocop_todo.yml` as the last `inherit_from` entry so per-gem todos take effect against the shared oss-guides config.
+2. **Koonwa fix** (`f994f4c`) — explicit `release_command` in master `release.yml`.
+3. **Broader-orphan cleanup wave** — ~40-45 repos × `.hound.yml` + orphan `rake.yml` / `notify.yml` / `integration.yml` / `test.yml`.
+
+Andrew's [`ci#339`](https://github.com/metanorma/ci/pull/339) is deliberately NOT in this wave — awaiting review, rides the next.
+
+Wave outcome section to follow immediately below.
+
+🤖
