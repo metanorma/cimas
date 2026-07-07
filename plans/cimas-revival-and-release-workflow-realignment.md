@@ -1437,3 +1437,88 @@ No automated coverage exists for "runner-side Ruby pins across the org must matc
 **Related**: [`ci#274`](https://github.com/metanorma/ci/issues/274) (Ruby 3.3 floor), [`ci#341`](https://github.com/metanorma/ci/pull/341) (drift-audit workflow), [`ci#342`](https://github.com/metanorma/ci/issues/342) (rolling tracking issue).
 
 🤖
+
+---
+
+## Outcome — 2026-07-07: metanorma-docker v1.16.8 released + suma-docker chain hop surfaced
+
+### Release status
+
+metanorma-docker v1.16.8 released cleanly. Both workflows completed successfully:
+
+- **Linux** ([run 28839809846](https://github.com/metanorma/metanorma-docker/actions/runs/28839809846)) — `Build+publish` for `metanorma-ruby`, `metanorma-ubuntu`, `metanorma-alpine`. Images live on `docker.io/metanorma/metanorma:1.16.8` and `ghcr.io/metanorma/metanorma:1.16.8`.
+- **Windows** ([run 28839809861](https://github.com/metanorma/metanorma-docker/actions/runs/28839809861)) — `Build Windows (ltsc2022)` + `(ltsc2025)` + `create-manifest`. Windows push happens inside the `build` job before tests; two `ltsc2025` test failures are non-blocking (`continue-on-error: true` on all `ltsc2025` matrix entries).
+
+### New release-chain hop discovered: metanorma/suma-docker
+
+Surfaced via [iso-10303#705](https://github.com/metanorma/iso-10303/issues/705). `metanorma/suma-docker` publishes `ghcr.io/metanorma/suma-docker`, a 30-line thin layer over the metanorma base image:
+
+```
+FROM metanorma/metanorma:1.16.6
+# install eengine 5.2.7 (EXPRESS schema engine)
+# install eep (Eurostep EXPRESS Parser)
+```
+
+Since the [`be4e186` 2026-07-02 restructure](https://github.com/metanorma/suma-docker/commit/be4e186), suma itself ships inside the `metanorma` gem, so this repo installs no gems — glues two static EXPRESS binaries onto the metanorma-docker base image. Windows leg exists (`Dockerfile.windows`) but is commented out in the workflow.
+
+**Automation status**: none. `Dockerfile` line 1 is a hardcoded `FROM metanorma/metanorma:X.Y.Z`. Release procedure requires manual base-image bump + workflow_dispatch of `release-tag.yml`. No `repository_dispatch` receiver, no notify hook, no polling. Maintainer confirmed the automation would be ideal but has not been in the current time budget; queued as a follow-up on this SSOT.
+
+### Downstream consumers (blast-radius map)
+
+Org-wide search surfaced two:
+
+1. **`metanorma/iso-10303-2-vocab` README** — documents `docker run ghcr.io/metanorma/suma-docker:latest` for Docker-preferring users. External-user surface.
+2. **`metanorma/iso-10303` `build.yml`** — uses `bundle exec suma build` **directly against the gem, not the Docker image**. Internal CI decoupled.
+
+No metanorma-org internal CI depends on suma-docker. Blast radius of a broken suma-docker release is bounded to external users pulling `:latest`.
+
+### Failure-mode analysis for auto-sync
+
+| Failure mode | Probability | Behaviour |
+|---|---|---|
+| Base distro migration breaks `apt-get` package names on the eengine install layer | Very low | Auto-build FAILS red, no broken image published. Safe fail. |
+| eengine 5.2.7 SBCL binary incompatible with newer glibc in bumped base | Very low | Build succeeds but `eengine --version` fails at runtime. Silent breakage. |
+| Base-image tag scheme changes | Very low | Build fails at `FROM` resolution. Safe fail. |
+| Major-version metanorma bump (e.g. `2.0.0`) with breaking gem-embedded SUMA changes | Rare (~biennial) | Auto-published image could ship silently broken. |
+
+The silent-broken-image class exists today with manual bumps — suma-docker's `publish-linux` builds and pushes without ever `docker run`-ing the image. Smoke-test guard is independent risk-reduction regardless of automation.
+
+### Queued follow-up (post-current-cycle)
+
+Two parts, sequenced:
+
+**Part A: Smoke-test guard on suma-docker's `build-push.yml`** (~15 min, standalone value).
+
+Add a step after build, before push:
+
+```yaml
+- name: Smoke-test the image
+  run: |
+    docker run --rm ghcr.io/metanorma/suma-docker:latest bash -c '
+      eengine --version || eengine --help || true
+      eep --help || true
+      metanorma --version
+    '
+```
+
+Kills the silent-broken-image class for both manual and future auto releases.
+
+**Part B: Auto-sync receiver** (~1-2 hrs, sequential after A).
+
+Two candidate shapes, pick at implementation:
+
+- **Shape 1 (preferred)** — Extend metanorma-docker's `announce` job (currently dispatches to `mn-samples-*` on tag push) to also fire a `repository_dispatch` of type `base-image-updated` to `metanorma/suma-docker`. Receiver workflow in suma-docker parses the dispatch payload, `sed`-bumps `FROM metanorma/metanorma:X.Y.Z` in both Dockerfiles, commits to main via bot, dispatches `release-tag.yml` with a patch-bumped `next_version`.
+- **Shape 2 (fallback)** — Scheduled cron on suma-docker that polls metanorma-docker's latest release tag and executes the same bump-commit-release when it detects a newer version. Simpler, higher latency.
+
+Optional gate: receiver auto-releases for patch/minor bumps only (`^X\.Y+\.\d+$` matches; major bump forces manual review).
+
+### Manual v1.16.8 bump
+
+Owner has taken the manual v1.16.8 bump personally in this cycle. Sequence for reference: edit `Dockerfile` line 1 from `metanorma/metanorma:1.16.6` to `:1.16.8`, edit `Dockerfile.windows` line 1 similarly, commit to main, workflow_dispatch `release-tag.yml` with `next_version: 0.3.0`. `build-push.yml` publishes `ghcr.io/metanorma/suma-docker:0.3.0` for `linux/amd64` + `linux/arm64` on tag push.
+
+### Related
+
+- Fits under the existing release-chain observability design gap logged in the tripwire-lesson section of this SSOT.
+- Adjacent to [`ci#274`](https://github.com/metanorma/ci/issues/274), [`ci#341`](https://github.com/metanorma/ci/pull/341), [`ci#342`](https://github.com/metanorma/ci/issues/342).
+
+🤖
