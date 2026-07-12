@@ -1747,3 +1747,32 @@ Not urgent — affected gems still have working CI locally, just latent drift th
 - **Rubocop-drift follow-up sweep** — scoped by the audit above; not urgent.
 
 🤖
+
+---
+
+## Outcome — 2026-07-12 ~23:40: pubid-etsi deprecation-status audit close
+
+### Trigger
+
+Follow-up conversation flagged that pubid-etsi is legacy — pubid moved to a monorepo. Turned the rubocop-drift-follow-up-sweep discussion into a pubid-etsi-specific audit.
+
+### Evidence
+
+- `cimas.yml` already carried a comment block noting 11 standalone `pubid-*` repos were **removed on 2026-06-29** (per `ci#274` / `#300` Gap 3): pubid-core, pubid-ieee, pubid-iso, pubid-iec, pubid-bsi, pubid-cen, pubid-jis, pubid-itu, pubid-ccsds, pubid-nist, pubid-plateau. The block explicitly noted pubid-etsi "remains pending a separate audit of its deprecation status."
+- `metanorma/pubid` monorepo's `archived-gems/` directory contains 13 pubid-* entries — the 11 removed + pubid-etsi + pubid-ansi. pubid-ansi was never in cimas.yml; pubid-etsi is the last straggler.
+- Standalone pubid-etsi repo: last real commit 2024-02-25 ("Bump to 0.1.0"), ~2 years frozen aside from tonight's redundant rubocop-drift regen PR.
+- RubyGems pubid-etsi 1.15.20 (2026-06-26): version matches the pubid monorepo pattern, published from `metanorma/pubid:archived-gems/pubid-etsi/`.
+
+Same class as the 11.
+
+### Fix
+
+**[`metanorma/ci:b40b761`](https://github.com/metanorma/ci/commit/b40b761)** direct-push to main: removes the `pubid-etsi:` entry from cimas.yml, updates the DEPRECATED block to include it in the removed list, and corrects the monorepo path reference from `metanorma/pubid:gems/` (wrong — that path doesn't exist) to `metanorma/pubid:archived-gems/<name>/` (correct). Matches the a864ed9/949efb2 precedent for cimas.yml corrections landing as direct-push to main.
+
+### Operational effect from the next wave
+
+- `cimas sync` no longer touches pubid-etsi.
+- `cimas cleanup-orphan-files` no longer sees the repo → no more no-op deletion branches emitted on it.
+- Drift-audit removes it from all 8 classes' scope.
+
+🤖
