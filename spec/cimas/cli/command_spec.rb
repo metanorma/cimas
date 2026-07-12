@@ -254,6 +254,67 @@ RSpec.describe Cimas::Repository do
     end
   end
 
+  describe "resolve_source (metanorma/ci#347 Option B — visibility-conditional docker.yml)" do
+    let(:repo) do
+      Cimas::Repository.new(
+        "mn-samples-bsi",
+        "remote" => "ssh://git@github.com/metanorma/mn-samples-bsi",
+        "branch" => "main",
+        "files" => {},
+      )
+    end
+
+    let(:command) { Cimas::Cli::Command.new(options("msg")) }
+
+    it "returns a String source unchanged (legacy path stays the fast path)" do
+      expect(command.resolve_source("gh-actions/samples/public-docker.yml", repo))
+        .to eq("gh-actions/samples/public-docker.yml")
+    end
+
+    context "with a visibility-conditional Hash source" do
+      let(:source) do
+        {
+          "if_public" => "gh-actions/samples/public-docker.yml",
+          "if_private" => "gh-actions/samples/private-docker.yml.erb",
+        }
+      end
+
+      it "picks the private template when the repo is private on GitHub" do
+        allow(command).to receive(:repo_visibility_private?).with(repo).and_return(true)
+        expect(command.resolve_source(source, repo))
+          .to eq("gh-actions/samples/private-docker.yml.erb")
+      end
+
+      it "picks the public template when the repo is public on GitHub" do
+        allow(command).to receive(:repo_visibility_private?).with(repo).and_return(false)
+        expect(command.resolve_source(source, repo))
+          .to eq("gh-actions/samples/public-docker.yml")
+      end
+    end
+
+    it "raises when the Hash source is missing either required key" do
+      allow(command).to receive(:repo_visibility_private?).with(repo).and_return(false)
+      expect { command.resolve_source({ "if_public" => "x" }, repo) }
+        .to raise_error(/visibility-conditional source needs/)
+      expect { command.resolve_source({ "if_private" => "x" }, repo) }
+        .to raise_error(/visibility-conditional source needs/)
+    end
+
+    it "caches the visibility lookup across multiple resolves on the same repo" do
+      call_count = 0
+      allow(command).to receive(:fetch_repo_visibility) do
+        call_count += 1
+        true
+      end
+      source = {
+        "if_public" => "gh-actions/samples/public-docker.yml",
+        "if_private" => "gh-actions/samples/private-docker.yml.erb",
+      }
+      3.times { command.resolve_source(source, repo) }
+      expect(call_count).to eq(1)
+    end
+  end
+
   def config_file_path
     Cimas.root_path.join("spec/fixtures/sample.yml")
   end
