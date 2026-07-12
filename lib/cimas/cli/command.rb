@@ -140,7 +140,8 @@ module Cimas
             puts "Syncing and staging files in #{repo_name}..."
 
             repo.files.each do |target, source|
-              source_path = File.join(config_master_path, source)
+              resolved_source = resolve_source(source, repo)
+              source_path = File.join(config_master_path, resolved_source)
               target_path = File.join(repos_path, repo_name, target)
               puts "file #{source_path} => #{target_path}" if verbose
 
@@ -472,6 +473,51 @@ module Cimas
 
       def git_remote_to_github_name(remote)
         remote.match(/github.com\/(.*)/)[1]
+      end
+
+      # For metanorma/ci#347 Option B: a `files:` value can be either the
+      # legacy String (a single template path) or a Hash of the shape
+      # `{ 'if_public' => path1, 'if_private' => path2 }`. In the Hash
+      # case, cimas picks the concrete template at sync time from the
+      # target repo's GitHub visibility, so the same cimas.yml entry
+      # tracks both public and private variants of e.g. docker.yml.
+      # See ci#347 (private-vs-public docker split) for the design.
+      def resolve_source(source, repo)
+        return source unless source.is_a?(Hash)
+
+        unless source.key?("if_public") && source.key?("if_private")
+          raise "[ERROR] visibility-conditional source needs both " \
+                "`if_public` and `if_private` keys; got: #{source.inspect}"
+        end
+
+        is_private = repo_visibility_private?(repo)
+        is_private ? source["if_private"] : source["if_public"]
+      end
+
+      # Returns true if the repo is GitHub-private, false if public.
+      # Cached per invocation so a wave sync makes at most one call per
+      # repo. Falls back to `true` (safer default: no accidental public
+      # deploy) if the API is unreachable and there's no cached answer.
+      def repo_visibility_private?(repo)
+        @visibility_cache ||= {}
+        slug = git_remote_to_github_name(repo.remote)
+        return @visibility_cache[slug] if @visibility_cache.key?(slug)
+
+        private_flag = fetch_repo_visibility(slug)
+        @visibility_cache[slug] = private_flag
+      end
+
+      def fetch_repo_visibility(slug)
+        require 'octokit'
+        github_client.repo(slug).private
+      rescue Octokit::NotFound
+        puts "[WARNING] Cannot fetch visibility for #{slug} (404); " \
+             "defaulting to `private` (safer)."
+        true
+      rescue StandardError => e
+        puts "[WARNING] Visibility fetch failed for #{slug}: " \
+             "#{e.message}; defaulting to `private` (safer)."
+        true
       end
 
       def open_prs
