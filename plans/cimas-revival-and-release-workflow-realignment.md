@@ -1600,3 +1600,53 @@ Sync-wave PRs that touched `release.yml` pick up a `github-advanced-security[bot
 - `cleanup-merged-prs` sweep after this wave's PRs merge.
 
 🤖
+
+---
+
+## Outcome — 2026-07-12: full wave closure + queued ci merges
+
+### ci merges
+
+- [`metanorma/ci#339`](https://github.com/metanorma/ci/pull/339) merged — Andrew's least-privilege `permissions:` blocks on the six master caller templates. Now on main; distributes on the next cimas wave and retires the CodeQL missing-permissions finding class fleet-wide.
+- [`metanorma/ci#348`](https://github.com/metanorma/ci/pull/348) merged — class (f) Ruby-floor drift audit. Runs on the next scheduled Wed 09:00 UTC drift-audit; findings will post to [ci#342](https://github.com/metanorma/ci/issues/342).
+- [`metanorma/ci#349`](https://github.com/metanorma/ci/issues/349) stays open — deeper bundle-install fix for `rubygems-release.yml`'s release job, follow-up.
+
+### Wave PR closure — all 82 open PRs handled
+
+Categorised the 58 open sync-wave + 24 open cleanup-wave PRs by mergeState. Batches:
+
+- **CLEAN (37)** — admin-merged (25 sync + 12 cleanup).
+- **UNSTABLE mn-templates-* (9)** — mass-fail CI attributable to the 2026-07-09 `lutaml/xmi` gem-yank fallout (per [metanorma-plugin-lutaml#290](https://github.com/metanorma/metanorma-plugin-lutaml/issues/290)); admin-merged since the wave content itself is sound.
+- **UNSTABLE other (31)** — mostly the same yank fallout on doc + gem repos, plus some rubocop-drift on gems whose local `.rubocop_todo.yml` predates ci#334's plugin additions. Admin-merged; per-gem `--regenerate-todo` remains a per-maintainer hygiene item.
+- **DIRTY (3)** — merge conflicts on `modspec-ruby#20`, `coradoc#248`, `pubid#90`. Closed with note explaining they'll re-emit on the next wave with a fresh branch base.
+- **Wrong org (1)** — `ammitto/ammitto#11` retried under the correct org, merged.
+
+Total: **78 merged + 3 closed + 1 pre-existing = all 82 wave PRs closed.**
+
+### Branch cleanup — `cimas cleanup-merged-prs` on both waves
+
+Two sweeps ran across the fleet's cimas-wd checkouts:
+
+- Sync-wave sweep: 18 `[deleted-merged]` + 54 `[deleted-no-pr]` + a handful of `[absent]`. The high no-pr count reflects wave-time silent pushes where `open-prs` skipped because target-branch was on-par with the new branch — the branches existed on origin but never turned into PRs.
+- Cleanup-wave sweep: 18 `[deleted-merged]` + 3 `[deleted-no-pr]`.
+
+**Total: ~93 branches cleaned across origin + local checkouts.**
+
+### Net wave impact
+
+Distributed and merged fleet-wide on this cadence:
+
+- Rubocop template correction (`.rubocop_todo.yml` as last `inherit_from`).
+- `release.yml` `release_command` fix (explicit `bundle install` + `bundle exec rake release`).
+- Broader-orphan cleanup: `.hound.yml` + orphan `rake/notify/integration/test.yml`.
+
+`metanorma/ci` main now carries Andrew's `permissions:` blocks and the class (f) drift audit; both queued to distribute / activate on the next cadence.
+
+### What ripens next
+
+- **ci#349** — deeper bundle-install fix, self-owned; land when time permits.
+- **Wed 2026-07-15 drift audit** — first scheduled run with class (f) live.
+- **Next fortnightly wave (~2026-07-22)** — will distribute Andrew's permissions blocks and any new template deltas.
+- **Per-gem rubocop-drift regeneration** — non-urgent; per-gem maintainers can handle at their pace, or a targeted sweep can automate.
+
+🤖
