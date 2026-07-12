@@ -1650,3 +1650,25 @@ Distributed and merged fleet-wide on this cadence:
 - **Per-gem rubocop-drift regeneration** — non-urgent; per-gem maintainers can handle at their pace, or a targeted sweep can automate.
 
 🤖
+
+---
+
+## Outcome — 2026-07-12 late-evening: ci#347 Option B shipped end-to-end
+
+### What shipped
+
+**[`metanorma/cimas#66`](https://github.com/metanorma/cimas/pull/66)** merged — `sync: support visibility-conditional files: values`. Adds `resolve_source(source, repo)` + `repo_visibility_private?(repo)` + `fetch_repo_visibility(slug)` helpers. Sync loop handles Hash-shaped `files:` values of the form `{ 'if_public' => path1, 'if_private' => path2 }` by picking the concrete template at sync time from `github_client.repo(slug).private`, cached per invocation. Backward-compatible: String values unchanged. Safer-default fallback: unreachable visibility → `private` (never deploys). 5 new specs; full 30-example suite passes.
+
+**[`metanorma/ci#350`](https://github.com/metanorma/ci/pull/350)** merged — `cimas.yml + drift-audit: visibility-driven docker template selection`. Refactored 63 doc-repo `docker.yml` mappings to the Hash shape (58 currently `public-docker.yml` + 5 currently `private-docker.yml.erb` — all become identical Hash values; cimas picks per-repo). Removed the `private-docs` group (visibility is now systematic, not hand-curated). Updated `.github/scripts/cimas-drift-audit.rb` with `resolve_template_path` + `repo_visibility_private?` helpers so the weekly scheduled audit handles Hash template_paths.
+
+### Auto-migration on next wave
+
+The 16 GitHub-private doc repos previously wrongly mapped to `public-docker.yml` (per the 2026-07-06 ci#347 visibility audit) auto-migrate to `private-docker.yml.erb` on the next `cimas sync`. Also `mn-samples-ribose` — currently in the now-defunct `private-docs` group but public on GitHub — gets `public-docker.yml` per its actual visibility. Latent-leak class closed.
+
+### Follow-up
+
+- **Wed 2026-07-15 drift audit** — first scheduled run under the new cimas.yml + updated drift-audit. Will visibility-lookup on the 63 doc repos (well within API limits).
+- **Next cimas wave (~2026-07-22)** — will auto-migrate the 16 mis-classified private repos. Wave PR bodies should call out the auto-migration for reviewer context.
+- **Visibility-conditional opt-outs** — the current opt-out parser (`scan_opt_outs` in drift-audit) doesn't recognise commented-out Hash-shape entries. Non-urgent (nobody's opted out of a Hash entry yet); filed as a follow-up refinement if it comes up.
+
+🤖
