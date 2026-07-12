@@ -1672,3 +1672,39 @@ The 16 GitHub-private doc repos previously wrongly mapped to `public-docker.yml`
 - **Visibility-conditional opt-outs** — the current opt-out parser (`scan_opt_outs` in drift-audit) doesn't recognise commented-out Hash-shape entries. Non-urgent (nobody's opted out of a Hash entry yet); filed as a follow-up refinement if it comes up.
 
 🤖
+
+---
+
+## Outcome — 2026-07-12 ~22:50: class (f) fleet-wide extension + residual generate.yml sweep
+
+### Fleet-wide class (f) extension — [`metanorma/ci#351`](https://github.com/metanorma/ci/pull/351) merged
+
+Closes the scope gap noted in [`#348`](https://github.com/metanorma/ci/pull/348)'s PR body: the class (f) audit was cimas.yml-only, which meant metanorma-docker's 2026-07-07 `release-tag.yml` Ruby-3.2 pin miss — the exact case that motivated the audit — was not covered because metanorma-docker isn't in cimas.yml.
+
+Added a small `SUPPLEMENTARY_RUBY_FLOOR_REPOS` allowlist for release-adjacent non-cimas repos:
+
+- `metanorma/metanorma-docker`
+- `metanorma/suma-docker`
+- `metanorma/ci`
+- `metanorma/packed-mn`
+
+Supplementary entries receive class (f) scanning only; classes (a)-(e3) don't apply. Minimal change: append `supplementary_entries` to the entries list in the `PHASE_4` (full report) and `PHASE_5` (class F isolated) harnesses. `audit_entry` naturally no-ops on file-drift / opt-outs for entries with empty file mappings.
+
+Locally verified: all 4 supplementary repos scan clean under the current (post-2026-07-07 fix) state.
+
+### Residual generate.yml orphan sweep — no live orphans
+
+Fired `cimas cleanup-orphan-files --only-target=.github/workflows/generate.yml` against the fleet. 8 orphans detected on the local checkout — investigation confirmed all 8 are the same repos whose 2026-07-05 cleanup PRs were admin-force-merged earlier the same evening. The stale local `cimas-wd` still carried the `generate.yml` files that were already removed on origin `main`. Cimas correctly pushed no-op deletion branches to origin.
+
+Deleted the 8 no-op branches from origin. The ci#347 follow-up on live `generate.yml` deletion is de facto complete — the 2026-07-05 orphan-cleanup wave + the same-evening admin-force-merge together handled every case.
+
+### Operational hygiene note
+
+`cimas-wd-2026-06-29` local state can drift from origin after admin-force-merges. Fix: `cimas pull` before firing `cleanup-orphan-files` (or any command that reads local state).
+
+### What ripens next
+
+- **Wed 2026-07-15 drift audit** — first scheduled run under the fully-extended class (f) scope (cimas + supplementary).
+- **Next cimas wave ~2026-07-22** — will pick up any new template deltas.
+
+🤖
