@@ -1708,3 +1708,42 @@ Deleted the 8 no-op branches from origin. The ci#347 follow-up on live `generate
 - **Next cimas wave ~2026-07-22** — will pick up any new template deltas.
 
 🤖
+
+---
+
+## Outcome — 2026-07-12 ~23:00-23:35: ci#349 discovery + metanorma-docker smoke gate + rubocop drift spot-check
+
+### ci#349 closed as pre-implemented — [`ci#352`](https://github.com/metanorma/ci/pull/352) merged
+
+Investigation for the ticket revealed that the "deeper fix" (explicit `bundle install` step inside `rubygems-release.yml`'s release job) was already implemented in [`#316`](https://github.com/metanorma/ci/pull/316) on 2026-06-29 — before Koonwa's original comment. Later refined by [`#328`](https://github.com/metanorma/ci/pull/328) to skip `development` + `test` groups.
+
+Closed [`ci#349`](https://github.com/metanorma/ci/issues/349) with an explanatory comment. [`ci#352`](https://github.com/metanorma/ci/pull/352) reverts the redundant `release_command: bundle install && bundle exec rake release` two-liner from the master `release.yml` template (added tonight at `f994f4c` as defense-in-depth against a bug that was already fixed). Downstream gems currently carrying the two-liner (from tonight's 2026-07-08 wave) keep it until their next resync — harmless double-install in the interim.
+
+### Metanorma-docker smoke gate — [`#238`](https://github.com/metanorma/metanorma-docker/pull/238) merged
+
+Parallel to Ronald's suma-docker smoke framework, but simpler — one-line `docker run --rm <image> metanorma version` gate before publish, on both Linux and Windows workflows. Closes the "image builds green but metanorma is broken" observability gap on the base image the whole fleet depends on. Placement: Linux in `lint` job after `Load image`; Windows in `build` job after `Build Docker Image` (Windows push happens inside the build job, unlike Linux).
+
+### Per-gem rubocop-drift regen — 1 gem shipped + a structural finding
+
+- `metanorma/coradoc` — clean, no drift.
+- `metanorma/pubid-etsi` — real drift, 49 offenses. Regenerated `.rubocop_todo.yml`, fixed `.rubocop.yml` inherit_from order (last-wins), updated oss-guides URL from `master` to `main`. Verified clean; shipped as [`pubid-etsi#8`](https://github.com/metanorma/pubid-etsi/pull/8).
+- Two other candidates (metanorma-document, html2doc) hit bundler friction; skipped rather than chase.
+
+### Structural finding: wave content didn't universally land
+
+pubid-etsi's live `.rubocop.yml` on origin `main` did NOT have the 2026-07-07 template correction (`.rubocop_todo.yml` as last inherit_from entry). Yet the 2026-07-08 sync-wave PR on pubid-etsi merged. Hypothesis: `cimas sync` produced no diff for pubid-etsi because the local `cimas-wd` checkout was already at a divergent state (prior partial sync or manual local edits), so cimas skipped emitting the template change. An unknown number of other gems may have similar drift.
+
+Follow-up recommendation:
+
+1. Run a scoped diff of every cimas-managed repo's live `.rubocop.yml` against the current master template. Repos where they differ should be manually resync'd, or the wave protocol updated so cimas sync forces the diff rather than skipping "no-diff" cases.
+2. Run `cimas pull` before the next wave to eliminate the stale-checkout class.
+
+Not urgent — affected gems still have working CI locally, just latent drift that surfaces when the todo actually gets consulted.
+
+### What ripens next (updated)
+
+- **Wed 2026-07-15 drift audit** — first scheduled run under fully-extended class (f) scope.
+- **Next cimas wave ~2026-07-22** — should fresh-`cimas pull` before firing, and audit template propagation post-wave to catch gems where the diff was silently no-op'd.
+- **Rubocop-drift follow-up sweep** — scoped by the audit above; not urgent.
+
+🤖
