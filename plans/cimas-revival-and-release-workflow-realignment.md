@@ -1776,3 +1776,54 @@ Same class as the 11.
 - Drift-audit removes it from all 8 classes' scope.
 
 🤖
+
+---
+
+## Outcome — 2026-07-17: model-iso lutaml-xsd Gemfile line persisted in Cimas
+
+### Context
+
+`metanorma/metanorma-model-iso`'s `.github/workflows/deploy.yml` ("Build and Deploy Grammars") had been dying with `bundler: command not found: lutaml-xsd` (exit 127) since 2026-07-05, last green 2026-06-28. Root cause: the `lutaml-xsd` executable dropped out of the `lutaml` gem's runtime dep chain in the early-July 2026 lutaml restructuring. Before that, plain `gem "lutaml"` transitively provided the executable; after, it doesn't.
+
+A hotfix on [`metanorma-model-iso#140`](https://github.com/metanorma/metanorma-model-iso/pull/140) added `gem "lutaml-xsd"` directly to the repo's live Gemfile on the `feature/mathml4-grammar` branch — workflow went green, first time since June 28. But that Gemfile is Cimas-generated, so the next cimas sync would revert the hotfix without a corresponding Cimas source change.
+
+### Fix — [`metanorma/ci#353`](https://github.com/metanorma/ci/pull/353)
+
+Scoped as a new template file `cimas-config/gh-actions/model/Gemfile.grammar-build` — identical to the shared `gh-actions/model/Gemfile` plus `gem "lutaml-xsd"`. `metanorma-model-iso`'s cimas.yml mapping changed to point at the variant. Other model repos keep the plain shared template unchanged.
+
+Chosen over three alternatives:
+
+- **Add `lutaml-xsd` to shared `Gemfile`** — would put the gem in ~15+ model repos' bundle graphs unnecessarily.
+- **Convert to `.erb` with a `with_values['grammar_build']` conditional** — clean pattern-wise but would cascade a rename to all model repos' `Gemfile:` mappings in cimas.yml.
+- **Scoped variant template (shipped)** — minimal footprint, greppable, exactly matches the scope.
+
+### Scope check — only `metanorma-model-iso` needs it
+
+Checked which cimas-managed repos actually invoke `lutaml-xsd`:
+
+- `metanorma-model-iso` — has `deploy.yml`; needs the gem.
+- Other model siblings (`standoc`, `un`, `cc`, `ogc`, `basicdoc-models`, `metanorma-requirements-models`) — no `deploy.yml`; only `make.yml` + `automerge.yml`.
+- `plateau-iur-schema-browser` also invokes `lutaml-xsd` but is not cimas-managed and uses a `path:`-mounted local clone of `lutaml/lutaml-xsd`, so unaffected.
+
+### Sibling breakage sweep — class isolated to `lutaml-xsd`
+
+Checked `make.yml` CI on 3 sibling model repos to see whether other `lutaml`-family binstubs (`lutaml lml generate`, `lutaml-wsd2uml` — both invoked from the shared `Makefile`) had similar drops:
+
+| Repo | `make.yml` last run |
+| --- | --- |
+| `metanorma-model-standoc` | 2026-07-05 success |
+| `basicdoc-models` | 2026-07-16 success |
+| `metanorma-requirements-models` | 2026-07-05 success |
+
+All green — the `lutaml` gem still provides its other CLI binstubs. Executable-drop is isolated to `lutaml-xsd`.
+
+### Ordering note
+
+model-iso #140 is still OPEN. Two possible merge sequences:
+
+- If **#140 merges first** → live Gemfile carries the gem; next cimas sync overwrites with `Gemfile.grammar-build` content (same effective result). No conflict.
+- If **ci#353 merges first + a sync wave fires** → cimas sync writes the corrected Gemfile to model-iso main. Then #140 rebase-merges on top; its Gemfile change becomes a no-op if it lands after the sync-touched Gemfile.
+
+Either sequence is safe. The interim (before either merges) is the current red-on-main state, with the hotfix isolated to #140's branch.
+
+🤖
