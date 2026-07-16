@@ -1827,3 +1827,38 @@ model-iso #140 is still OPEN. Two possible merge sequences:
 Either sequence is safe. The interim (before either merges) is the current red-on-main state, with the hotfix isolated to #140's branch.
 
 🤖
+
+---
+
+## Outcome — 2026-07-17: pubid removed from cimas.yml (monorepo transferred out of metanorma org)
+
+### Trigger
+
+The 2026-07-15 scheduled drift-audit run surfaced `pubid` as a class (c) "Repo transferred / renamed" error: `metanorma/pubid` was transferred to a new `pubid/pubid` org. cimas.yml was still following the GitHub redirect. Only error-severity finding in the report.
+
+### Fix — [`metanorma/ci:c307454`](https://github.com/metanorma/ci/commit/c307454) direct-push to main
+
+Removed the pubid entry from cimas.yml rather than update the remote URL to the new org path. Consolidated the DEPRECATED pubid-family comment block to enumerate the full timeline:
+
+- 2026-06-29 — 11 standalone `pubid-*` repos removed (per ci#274, #300 Gap 3)
+- 2026-07-12 — pubid-etsi removed (deprecation-status audit close)
+- 2026-07-17 — pubid (monorepo) removed (cross-org transfer)
+
+Also corrected the archived-gems path reference (was `metanorma/pubid:archived-gems/`, now `pubid/pubid:archived-gems/` reflecting the new org).
+
+Direct-push to main per the standing precedent for cimas.yml corrections.
+
+### Operational effect from next wave
+
+- `cimas sync` no longer touches pubid.
+- `cimas cleanup-orphan-files` no longer sees the repo.
+- Drift-audit removes it from scope. The class (c) error retires on the next scheduled Wed audit run (~2026-07-22 09:00 UTC).
+
+### Wed 2026-07-15 audit pan-out (context for the fix)
+
+- **1 error** — the pubid transfer (fixed by this change).
+- **146 warnings** — E2 silent template drift across the fleet. Confirms the 2026-07-12 rubocop-only spot-check (18 gems) as one slice of a much wider pattern. Corrective sweep queued for the ~2026-07-22 wave with fresh `cimas pull` pre-wave hygiene.
+- **2 flags** — E3 documented opt-outs; not actionable.
+- **0 class (f) findings** — the fleet-wide class (f) extension shipped 2026-07-12 (ci#351) is working. cimas fleet + supplementary release-adjacent repos all on Ruby ≥ 3.3 floor.
+
+🤖
