@@ -1884,9 +1884,13 @@ Implemented as [`metanorma/ci#355`](https://github.com/metanorma/ci/pull/355). *
 
 Per the ticket, the floor is opt-out for gems whose maintainers write Release notes by hand at release time. Introduces two variant caller templates + updates 21 cimas.yml mappings.
 
-- **`master/release_manual_notes.yml`** (new; variant of `release.yml`) — 20 gems mapped to it.
-- **`master/release_wo_bundle_install_manual_notes.yml`** (new; variant of `release_wo_bundle_install.yml`) — 1 gem mapped to it.
+- **`master/release_manual_notes.yml`** (new; variant of `release.yml`) — 24 gems mapped to it: metanorma-cli, metanorma-core, metanorma-ogc, metanorma-cc, metanorma-ribose, metanorma-iho, metanorma-ieee, metanorma-iec, metanorma-ietf, metanorma-standoc, metanorma-iso, metanorma-taste, metanorma-itu, metanorma-generic, metanorma-bipm, metanorma-jis, metanorma-plateau, metanorma-document, isodoc, isodoc-i18n, html2doc, gb-agencies, cnccs, isoics.
+- **`master/release_wo_bundle_install_manual_notes.yml`** (new; variant of `release_wo_bundle_install.yml`) — 3 gems mapped to it: metanorma-utils, metanorma (top-level), mn-requirements.
 - Each variant file carries a header block naming its parent, its consumers, and how to switch back to the auto-notes floor.
+
+### Enumeration pass
+
+Initial predicate matched only `metanorma-*` (with plugin exception) + explicit `isodoc*`/`basicdoc-models`. The maintainer flagged `html2doc` as missed; a follow-up enumeration pass ran through every gem in cimas.yml mapping a `release*` template and presented candidates in three tiers (strong-signal, definitely-not, ambiguous). Six additional gems were confirmed owned and added to the opt-out set: html2doc, metanorma (top-level), mn-requirements, gb-agencies, cnccs, isoics. Total opt-out set: 27 (plus 2 exempt-by-construction via release_github_packages.yml).
 
 ### Exempt-by-construction (no variant needed)
 
