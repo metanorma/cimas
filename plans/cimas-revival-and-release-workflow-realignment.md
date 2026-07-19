@@ -1862,3 +1862,42 @@ Direct-push to main per the standing precedent for cimas.yml corrections.
 - **0 class (f) findings** — the fleet-wide class (f) extension shipped 2026-07-12 (ci#351) is working. cimas fleet + supplementary release-adjacent repos all on Ruby ≥ 3.3 floor.
 
 🤖
+
+---
+
+## Outcome — 2026-07-20: ci#354 release-notes floor + opt-out variants
+
+### Ticket + PR
+
+[`metanorma/ci#354`](https://github.com/metanorma/ci/issues/354) — guarantee GitHub Release notes for every tag `rubygems-release.yml` publishes, with per-caller opt-out. Motivation: gems in the stack were accumulating tags with no Releases (metanorma-plugin-lutaml v0.7.35-v0.7.50 the recent case; pattern recurs).
+
+Implemented as [`metanorma/ci#355`](https://github.com/metanorma/ci/pull/355). **Held for review** — the maintainer's directive is to wait for the metanorma/ci reviewer's engagement or an explicit greenlight rather than self-merge, since the change touches every gem's release path.
+
+### Part 1 — release-notes floor in `rubygems-release.yml`
+
+- **New input** `release_notes: 'auto' (default) | 'manual'`.
+- **New step** at end of the release job: ensures a GitHub Release exists for the pushed tag with auto-generated notes when none exists. Never overwrites: `gh release view` is the existence check; `gh release create --generate-notes` only fires on the not-exists path.
+- Runs on the same `SHOULD_PUBLISH` / `skip_push` gates as the publish step, plus `release_notes != 'manual'` opt-out.
+- Uses the release job's existing `contents: write` permission (already there from the ci#339 permission ceilings).
+
+### Part 2 — opt-out variant templates for the maintainer's gems
+
+Per the ticket, the floor is opt-out for gems whose maintainers write Release notes by hand at release time. Introduces two variant caller templates + updates 21 cimas.yml mappings.
+
+- **`master/release_manual_notes.yml`** (new; variant of `release.yml`) — 20 gems mapped to it.
+- **`master/release_wo_bundle_install_manual_notes.yml`** (new; variant of `release_wo_bundle_install.yml`) — 1 gem mapped to it.
+- Each variant file carries a header block naming its parent, its consumers, and how to switch back to the auto-notes floor.
+
+### Exempt-by-construction (no variant needed)
+
+`metanorma-nist` and `metanorma-bsi` map `release_github_packages.yml`, which calls `ghpkg-release.yml`, not `rubygems-release.yml`. The floor lives in `rubygems-release.yml`, so those two are automatically exempt.
+
+### Documentation discipline
+
+Same per-file header discipline established with the `Gemfile.grammar-build` variant in ci#353. Three variants across two directories now (`master/` + `model/`); a `README.md` inventorying them becomes worth adding at the 4th variant.
+
+### Wave sequencing
+
+If PR #355 merges before the ~2026-07-22 wave, the wave propagates: opt-out gems get their `.github/workflows/release.yml` re-rendered from the variant template (adds `release_notes: manual`); non-opt-out gems pick up the auto-notes floor on their next release run.
+
+🤖
