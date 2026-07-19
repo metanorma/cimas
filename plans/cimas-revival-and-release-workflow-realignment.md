@@ -1905,3 +1905,36 @@ Same per-file header discipline established with the `Gemfile.grammar-build` var
 If PR #355 merges before the ~2026-07-22 wave, the wave propagates: opt-out gems get their `.github/workflows/release.yml` re-rendered from the variant template (adds `release_notes: manual`); non-opt-out gems pick up the auto-notes floor on their next release run.
 
 🤖
+---
+
+## Incident 2026-07-20: `rake.yml` restored on 15 flavor gems after 2026-07-07 misclassification
+
+**Discovery vector.** [metanorma/ci#358](https://github.com/metanorma/ci/issues/358) surfaced a `workflow_dispatch` release on metanorma-plugin-lutaml that went green while publishing nothing — the gated-direct pattern in `rubygems-release.yml` defers publish to a downstream `do-release` `repository_dispatch`, and the caller repo had no tag-listener workflow to fire it. Cimas.yml didn't map `rake.yml` for that repo, so drift-audit class (e2) had nothing to check.
+
+A sweep for other repos in the same shape flagged 19 candidates. Live topology verification narrowed to: 2 confirmed same-shape (metanorma-plugin-lutaml, cnccs), 1 has-locally-but-cimas-drift (coradoc), and 16 flavor gems (metanorma-cli + 15 others). A workflow run link (`metanorma-iso/actions/runs/28833404176`) showed that a workflow named "rake" had run successfully on 2026-07-07 on metanorma-iso and was subsequently in `state: deleted` — the flavor gems had a `rake.yml`; it had been removed.
+
+Tracing found 15 sibling commits on 2026-07-07 across metanorma-{ogc, cc, ribose, iho, ieee, iec, iso, taste, itu, generic, bipm, jis, plateau, nist, bsi}, all with the message *"cleanup: purge defunct/orphan CI files (Hound, orphan rake/notify/integration/test)"*, from the 2026-07-08 broader-orphan-cleanup wave documented in this SSOT.
+
+**Root-cause classifier.** `cimas cleanup-orphan-files` uses the logic: *file present in repo but not mapped in cimas.yml → orphan → delete*. That logic is topology-blind — cimas.yml is not exhaustive of the workflow files a repo actually needs. The `rake.yml` files on the flavor gems had never been mapped in cimas.yml but were live and drove the release-test relay on every tag push. Reading "not mapped in cimas.yml" as evidence of "no longer used" was the classification error.
+
+**Blast radius.** 15 flavor gems left in a silent-dead-end release state from 2026-07-08 onwards — surfaced only on `workflow_dispatch` releases with gated=true (default) and PAT present. Cascade-driven releases from upstream `do-release` dispatches continued to work; local `bundle exec rake release` (which bypasses the workflow) also continued to work. The gap would have surfaced dramatically on the first emergency manual release attempt on any flavor gem via the GitHub UI button.
+
+**Restoration (2026-07-20).**
+
+1. 15 revert commits across the flavor gems' default branches — 14 via existing sibling clones with a tracked-only dirty check, 1 (metanorma-generic) via a fresh `/tmp` clone to protect an in-progress modification. Files restored: `.github/workflows/rake.yml` + `integration.yml` + `notify.yml` + `test.yml` where the original commits had removed them. Each revert commit cross-references metanorma/ci#358.
+2. `.hound.yml` post-revert cleanup — the reverts also re-added `.hound.yml` on ~12 gems where the original cleanup batch had removed it (Hound is genuinely defunct). 12 follow-up commits deleted it cleanly.
+3. `cimas.yml` topology patch ([`metanorma/ci:f2dc189`](https://github.com/metanorma/ci/commit/f2dc189)) — added `rake.yml → gh-actions/master/rake.yml` mapping for all 15 flavor gems. Cimas now catalogues the file; drift-audit class (e2) will surface any future divergence. Direct main commit per the cimas.yml-correction precedent.
+4. Companion `cimas.yml` patch ([`metanorma/ci:4173899`](https://github.com/metanorma/ci/commit/4173899)) — same mapping added for metanorma-plugin-lutaml + cnccs (Class A of the ci#358 sweep). Direct main commit.
+
+**Structural lesson.** `cimas.yml` cannot be used as a topology authority for orphan-detection. Its incompleteness is proven (drift-audit class (g) variant-drift audit per ci#356, tag-listener sweep per ci#358, this incident). Any "is this file cimas-managed?" check needs to be combined with a "is this file executed by any recent GH Actions run?" signal before a deletion is proposed. Follow-up ticket on metanorma/ci: `cimas cleanup-orphan-files` should cross-check workflow-run history before flagging a workflow file as orphan.
+
+**Follow-ups queued.**
+
+- Ticket on metanorma/ci: `cimas cleanup-orphan-files` topology-aware hardening (workflow-run history cross-check).
+- Comment on metanorma/ci#358 reporting the sweep result + restoration + reinforcing the preflight-assertion ask.
+- Ticket on metanorma/ci: coradoc's local `rake.yml` should be cimas-managed (Class B of the sweep).
+- Class C flavor-gem release-topology audit — deferred after ticket sweep.
+
+**What closes vs. what stays open.** The immediate release-safety hole (17 gems with dead-end workflow_dispatch releases) is closed by the reverts and the cimas.yml topology patches. The class-of-miss root cause (topology-blind cleanup + green-means-published unverified) stays open until the cleanup-orphan-files hardening ships and metanorma/ci#358 ask #3 (preflight assertion in `rubygems-release.yml`) is implemented.
+
+🤖
