@@ -1938,3 +1938,34 @@ Tracing found 15 sibling commits on 2026-07-07 across metanorma-{ogc, cc, ribose
 **What closes vs. what stays open.** The immediate release-safety hole (17 gems with dead-end workflow_dispatch releases) is closed by the reverts and the cimas.yml topology patches. The class-of-miss root cause (topology-blind cleanup + green-means-published unverified) stays open until the cleanup-orphan-files hardening ships and metanorma/ci#358 ask #3 (preflight assertion in `rubygems-release.yml`) is implemented.
 
 🤖
+
+---
+
+## 2026-07-21: dev group re-included in `rubygems-release.yml` fresh install (ci#258 rethink)
+
+**Symptom.** metanorma-core run [29732731200](https://github.com/metanorma/metanorma-core/actions/runs/29732731200) (workflow release → `rubygems-release.yml@main`, event `repository_dispatch: do-release`) died at `bundle exec rake release` with `can't find executable rake for gem rake. rake is not currently included in the bundle`.
+
+**Root cause.** The release job's fresh `bundle install` was excluding the `development` group via `bundle config set --local without 'development test'`. `rake` is `add_development_dependency` in almost every metanorma-stack gem — the exclusion took it with it. Any caller whose release path is `bundle exec rake release` (the default, and the shape metanorma-core's Cimas-generated caller uses via a bolt-on `release_command: bundle install && bundle exec rake release` from ci#314) then dies at the first `bundle exec rake` invocation.
+
+**ci#258 rethink.** The 2023 exclusion was motivated by metanorma-taste's dev-dep transitive-graph flux (`metanorma-cli` chain in flux mid-rollout, `bundle install` couldn't resolve). Two years on, the exclusion has proven over-broad — it collateral-damaged `rake` for every gem shipping the standard release flow. The correct scope for dev-graph flux is the individual gem (pin the offending dev dep in that gem's Gemfile / gemspec), not fleet-wide dev-group exclusion.
+
+**Fix.** `bundle config set --local without 'development test'` → `bundle config set --local without 'test'`. Development now installed (rake and release-tooling resolvable); test still excluded (release doesn't run test suites, test frameworks are pure install overhead here). Comment block on the step updated to reflect the new state + retain the ci#258 rationale as historical context.
+
+Shipped as [metanorma/ci#363](https://github.com/metanorma/ci/pull/363), merged 2026-07-20 (commit `4b03f14`). metanorma-core v0.2.2 completion re-dispatched immediately after with `next_version: skip` to publish the already-tagged version through the corrected chain.
+
+---
+
+## 2026-07-21: idempotent publish guard on both release reusables
+
+**Symptom.** metanorma-nist [run 29750989944](https://github.com/metanorma/metanorma-nist/actions/runs/29750989944) (repository_dispatch: do-release, actor metanorma-ci) went red with `Error: Version 2.8.9 of "metanorma-nist" has already been pushed`. The version had been hand-published ~7 min earlier as a workaround for a local rubygems-4.0.10 credential issue, so the automated do-release publish hit a duplicate. **2.8.9 is published**; the red run is cosmetic — but it's a green-means-published inversion: a successful publish state produces a failed run.
+
+**Root cause.** `ghpkg-release.yml`'s publish step is a bare `gem push --key github --host … pkg/*.gem` with no idempotency guard — any already-present version exits 1. The metanorma/ci README's claim that "the idempotent guard handles the second push from do-release" describes intent, not implementation: no such guard existed in the reusable. Same class of gap exists in `rubygems-release.yml`'s publish steps, though there a pre-check via `gem-idempotent-push-guard-action` covers the common case (with a TOCTOU race on manual pre-publishes and relay double-fires).
+
+**Fix.** Wrap the `gem push` in both reusables with a POST-check that treats `already been pushed` as success and propagates every other exit code unchanged. Purely additive: real failures stay red; only the already-published case turns green.
+
+- `ghpkg-release.yml` — post-check on the publish step (the only path there; no pre-check existed).
+- `rubygems-release.yml` — post-check on both publish paths (API-key + OIDC), with broader match to catch rubygems.org's two error phrasings (`already been pushed` and `Repushing of gem versions is not allowed`). Belt-and-suspenders with the existing pre-check, closing the TOCTOU window.
+
+Shipped as [metanorma/ci#364](https://github.com/metanorma/ci/pull/364). Adds to the ci#302 publish-observability follow-ups.
+
+🤖
