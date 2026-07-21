@@ -1969,3 +1969,53 @@ Shipped as [metanorma/ci#363](https://github.com/metanorma/ci/pull/363), merged 
 Shipped as [metanorma/ci#364](https://github.com/metanorma/ci/pull/364). Adds to the ci#302 publish-observability follow-ups.
 
 🤖
+
+---
+
+## 2026-07-21: metanorma-core v0.2.2 arc — ci#358 ask #3 sharpened into three sub-asks
+
+The metanorma-core v0.2.2 release journey (2026-07-20/21) exposed two additional failure modes on top of the original ci#358 tag-listener-absent case. All three are now bundled as ci#358 ask #3(a)(b)(c) and implemented in [metanorma/ci#360](https://github.com/metanorma/ci/pull/360).
+
+### Chronology
+
+All times UTC, verified from run logs.
+
+1. **09:00Z 2026-07-20** — gated `workflow_dispatch` on metanorma-core. Version bumped, tag `v0.2.2` pushed, run green. Publication correctly deferred (`SHOULD_PUBLISH=false`). The relay fired via `rake.yml` — which existed on core only because of the 2026-07-20 Class-C restoration (see the earlier "rake.yml restored on 15 flavor gems" entry). Without that restoration, this dispatch leg would have silently dead-ended.
+
+2. **09:47Z** — `do-release` `repository_dispatch` publish leg went red at `bundle exec rake release` with `can't find executable rake for gem rake`. Root cause: metanorma-core declared `rake` as a gemspec `add_development_dependency` only, with no top-level `gem "rake"` in its Gemfile. The release job's `bundle install --without 'development test'` then excluded rake. Fixed both ways: metanorma-core@9e2d9da added top-level `gem "rake"`; separately, [metanorma/ci#363](https://github.com/metanorma/ci/pull/363) removed the `development` group exclusion from the reusable's bundle install.
+
+3. **14:57Z** — release re-dispatched manually with `next_version=skip`. The run went green while publishing nothing — this was again the gated dispatch leg (`workflow_dispatch` + `gated=true` + PAT + `SHOULD_PUBLISH=false`). Second occurrence in 48 hours of a green dispatch leg being misread as a shipped gem — the first was metanorma-plugin-lutaml v0.7.47-v0.7.50 (ci#358's origin).
+
+4. **01:05Z 2026-07-21** — manual `do-release` `repository_dispatch` fired directly against metanorma-core. The publish leg ran, `gem push` succeeded, post-push verification confirmed `metanorma-core 0.2.2` live on rubygems.org.
+
+### The sharpened ci#358 ask #3
+
+- **Ask #3(a)** — as originally specified: gated `workflow_dispatch` refuses to run when the caller repo has no tag-listener workflow. Prevents the silent dead-end.
+
+- **Ask #3(b) — new from the 14:57 incident**: even with a listener present, the gated dispatch leg must not present as a release. End the dispatch run with an explicit job summary + `::notice title=Publication DEFERRED::` + a self-describing step name, so a green dispatch cannot be read as a shipped gem.
+
+- **Ask #3(c) — new from the 09:47 incident**: the publish leg depends on rake resolving outside the development group. metanorma-core proved a repo can silently violate that. Preflight the rake resolution and fail with a pointed message rather than the generic "can't find executable rake for gem rake" from layer 9.
+
+### Shipped in metanorma/ci#360
+
+Two commits on `feature/rubygems-release-tag-listener-preflight`:
+
+- `58c9fed` — ask 3(a): preflight step in the `preflight` job, uses PyYAML to scan `.github/workflows/*.yml` for a workflow listening on `push: tags: [ v* ]`. Fails fast if absent. Trigger: `inputs.gated == true && env.HAVE_PAT_TOKEN == 'true'` (parent job also gates on `workflow_dispatch`).
+
+- `afa1934` — asks 3(b) + 3(c):
+  - Ask 3(b): new final step in the release job. Fires when `always() && event_name == 'workflow_dispatch' && env.SHOULD_PUBLISH != 'true'`. Writes a `# ⚠️ Publication DEFERRED — this run did NOT publish` block to `$GITHUB_STEP_SUMMARY` with the confirmation checklist, plus `::notice title=Publication DEFERRED::…`. Step name itself is self-describing in the job step list.
+  - Ask 3(c): new step right after the fresh bundle install, fires on `env.SHOULD_PUBLISH == 'true' && env.HAS_API_KEY == 'true'` (API-key path only). Runs `bundle exec rake --version`; on failure, emits a pointed error naming metanorma-core@9e2d9da as the reference fix and referencing metanorma/ci#363 for the group-inclusion check.
+
+### Structural lesson
+
+Two consecutive incidents (lutaml v0.7.47-v0.7.50 + core v0.2.2) where a healthy-looking dispatch leg was misread as a shipped gem is the strongest recent evidence for the "green means published" observability programme ([metanorma/ci#302](https://github.com/metanorma/ci/issues/302)). Ask 3(b)'s disambiguation is the mechanical fix; #302's broader observability work is the systemic answer.
+
+### Related
+
+- [metanorma/ci#358](https://github.com/metanorma/ci/issues/358) — closed by this PR.
+- [metanorma/ci#302](https://github.com/metanorma/ci/issues/302) — green-means-published programme.
+- [metanorma/ci#309](https://github.com/metanorma/ci/issues/309) — 11-layer release chain.
+- [metanorma/ci#363](https://github.com/metanorma/ci/pull/363) — dev-group inclusion (merged 2026-07-20).
+- [metanorma/ci#364](https://github.com/metanorma/ci/pull/364) — idempotent publish guard (pending merge).
+
+🤖
