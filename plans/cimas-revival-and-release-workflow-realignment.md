@@ -2077,3 +2077,20 @@ Both PRs closed:
 ci#186 left open for possible future scope reconsideration.
 
 🤖
+
+---
+
+## 2026-07-21: rubocop plugins synced without their gems — latent CI breakage across the 2026-07-05 wave
+
+The 2026-07-05 cimas sync wave homogenised `.rubocop.yml` across the org with `plugins: rubocop-rspec, rubocop-performance, rubocop-rake` (central plugin enablement per [metanorma/ci#332](https://github.com/metanorma/ci/issues/332)). Rubocop plugins are gems, however, and neither the repo Gemfiles (not cimas-managed) nor the `Rubocop` workflow's `reclaim-the-stack/rubocop-action` `gem_versions:` pin were updated to provide them. Any wave repo lacking the gems now fails rubocop at config load with `cannot load such file -- rubocop-rspec`.
+
+The breakage is latent rather than immediate: the Rubocop workflow only runs on PRs touching Ruby files, and a cimas-sync PR touches none — so the wave's own CI passed, and the failure first surfaced on 2026-07-21 in [metanorma-cli#440](https://github.com/metanorma/metanorma-cli/pull/440), the first Ruby-touching PR in that repo since the sync.
+
+Repo-layer fix pattern (landed on metanorma-cli#440):
+
+- Gemfile development group: add `gem "rubocop-rspec"`, `gem "rubocop-rake"`;
+- `.github/workflows/rubocop.yml`: `gem_versions: rubocop:1.72.2 rubocop-performance:1.24.0 rubocop-rspec:3.10.2 rubocop-rake:0.7.1`.
+
+Open follow-up: fix at the template layer (the rubocop workflow template must provide the plugin gems whenever the synced `.rubocop.yml` declares them), then sweep the 2026-07-05 wave repos — metanorma-taste is confirmed to have the identical gap. Design rule going forward: a sync wave that ships a config referencing gems must ship the gem provisioning in the same wave.
+
+🤖
