@@ -2062,3 +2062,18 @@ ci#365 is the docker-side member of this family. Combined with the recent merges
 Cross-org scope confirmed: `rubygems-release.yml` is used by ~21 external repos across ~13 organizations beyond metanorma (lutaml, fontist, glossarist, plurimath, relaton, ietf-ribose, pubid, unitsml, geolexica, riboseinc, and others). The `configure-rubygems-credentials` exchange added in `913ea3f` handles all of them uniformly — repos that ARE set up as Trusted Publishers pass preflight; repos that AREN'T fail-fast in ~30s instead of after the 2h+ rake matrix.
 
 🤖
+
+---
+
+## 2026-07-21: metanorma/ci#361 declined
+
+The sample-convert.yml reusable workflow proposal (Path 1 of [metanorma/ci#186](https://github.com/metanorma/ci/issues/186), consolidating the duplicated `convert.yml` shape in mn-samples-* repos) was declined on 2026-07-20 with the reasoning that a reusable workflow for two consumers is thin abstraction and not warranted at that consumer count.
+
+Both PRs closed:
+
+- [metanorma/ci#361](https://github.com/metanorma/ci/pull/361) — the reusable definition
+- [metanorma/mn-samples-bsi#365](https://github.com/metanorma/mn-samples-bsi/pull/365) — the canary migration
+
+ci#186 left open for possible future scope reconsideration.
+
+🤖
