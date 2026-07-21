@@ -2052,3 +2052,13 @@ Filed as P0. Full detail in [metanorma/ci#365](https://github.com/metanorma/ci/i
 ci#365 is the docker-side member of this family. Combined with the recent merges (ci#360 + ci#364 + ci#363), the failsafe programme now covers: tag-listener presence, dispatch-leg disambiguation, rake preflight, idempotent publish guard, dev-group inclusion. Docker gating is the next structural item.
 
 🤖
+
+---
+
+## 2026-07-21: metanorma/ci#331 merged — OIDC preflight with fail-safe preserved
+
+[metanorma/ci#331](https://github.com/metanorma/ci/pull/331) (`fix: allow OIDC auto-discovery path in release preflight`) merged with the additional commit `913ea3f` preserving the preflight's fail-fast safety net for the OIDC path via an in-preflight Trusted Publisher exchange. The fail-safe now catches misconfigured OIDC auto-discovery cases in ~30 seconds rather than after the 2h+ rake matrix, while unblocking the auto-discovery use case for gems that have Trusted Publisher configs on rubygems.org.
+
+Cross-org scope confirmed: `rubygems-release.yml` is used by ~21 external repos across ~13 organizations beyond metanorma (lutaml, fontist, glossarist, plurimath, relaton, ietf-ribose, pubid, unitsml, geolexica, riboseinc, and others). The `configure-rubygems-credentials` exchange added in `913ea3f` handles all of them uniformly — repos that ARE set up as Trusted Publishers pass preflight; repos that AREN'T fail-fast in ~30s instead of after the 2h+ rake matrix.
+
+🤖
