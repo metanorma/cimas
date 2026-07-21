@@ -2019,3 +2019,36 @@ Two consecutive incidents (lutaml v0.7.47-v0.7.50 + core v0.2.2) where a healthy
 - [metanorma/ci#364](https://github.com/metanorma/ci/pull/364) — idempotent publish guard (pending merge).
 
 🤖
+
+---
+
+## 2026-07-21: metanorma-cli → docker release chain has no test gate (ci#365)
+
+Filed as P0. Full detail in [metanorma/ci#365](https://github.com/metanorma/ci/issues/365).
+
+**Symptom.** metanorma-cli v1.16.9 rake test suite went red at "Test sample ietf" → release published anyway → `ruby-artifacts.yml`'s `release: published` trigger fired → docker built off the red state at 16:06 UTC 2026-07-20. Rake only went green later once metanorma-ietf 3.7.9 landed (03:11 UTC 2026-07-21). The docker image published in the window between those events was built against pre-fix deps.
+
+**Core defect.** `metanorma-cli/.github/workflows/ruby-artifacts.yml` triggers the downstream docker dispatch off `release: published`, not off any tests-passed signal. `release: published` is a metadata event on the release object, not a quality signal on the code. The design is foundational to the workflow — no test gate has ever existed on the cli → docker path.
+
+**Why it's P0.** Docker users are the least-technical audience in the distribution — they run the image because they can't recompile the cli stack themselves. A broken gem reaching them has no user-side workaround. Shipping untested code to that specific audience under a green signal is the core anti-pattern the gated chain is supposed to prevent.
+
+**Compounding problems** (all detailed in ci#365):
+
+1. Dep-only fixes don't re-trigger docker.
+2. `release-artifacts.yml` fails HTTP 422 on every release (redundant + misleading signal).
+3. Two docker entry points, only one wired; reconcile onto test-gated path.
+4. Timeline integrity gap on the rubygems `created_at` vs release-workflow-run relationship — flag for reconciliation.
+
+**Fix requirement.** The docker dispatch must depend on a `tests-passed` `repository_dispatch` from `rake.yml`, not on `release: published`. The mechanism exists in the release relay (rake.yml fires `do-release` after tests pass) — docker needs the same shape.
+
+**Immediate remediation.** Manual docker rebuild in flight for v1.16.9.
+
+**Related.**
+
+- [metanorma/ci#302](https://github.com/metanorma/ci/issues/302) (green-means-published observability programme)
+- [metanorma/ci#309](https://github.com/metanorma/ci/issues/309) (release-chain streamlining)
+- [metanorma/ci#358](https://github.com/metanorma/ci/issues/358) (tag-listener preflight, closed by ci#360)
+
+ci#365 is the docker-side member of this family. Combined with the recent merges (ci#360 + ci#364 + ci#363), the failsafe programme now covers: tag-listener presence, dispatch-leg disambiguation, rake preflight, idempotent publish guard, dev-group inclusion. Docker gating is the next structural item.
+
+🤖
