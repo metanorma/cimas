@@ -367,6 +367,10 @@ module Cimas
       def push
         sanity_check
 
+        drift_pushes = 0
+        provisioning_pushes = 0
+        skipped_no_op = 0
+
         filtered_repo_names.each do |repo_name|
           repo = repo_by_name(repo_name)
 
@@ -382,6 +386,34 @@ module Cimas
           end
 
           g = Git.open(repo_dir)
+
+          # Skip pure no-op pushes: no drift AND the wave branch already
+          # exists on remote. The historical "always push even without
+          # changes" behavior was there to guard against the branch having
+          # been deleted on remote (open-prs needs it to exist). Checking
+          # ls-remote beforehand satisfies the same invariant without
+          # generating notification noise for the 30-60% of mapped repos
+          # that have no drift on any given wave.
+          #
+          # Assumes `cimas sync` has been run against this work-dir first,
+          # so wd status reflects the drift state (matches the ordering
+          # documented in README "End-to-end workflow").
+          has_local_drift = wd_has_drift?(repo_dir)
+          remote_branch_exists = remote_has_branch?(g, push_to_branch)
+
+          if !has_local_drift && remote_branch_exists
+            skipped_no_op += 1
+            msg = "Skipping no-op push to #{repo_name} (no drift; wave branch #{push_to_branch} already on remote)"
+            puts config['dry_run'] ? "dry run: #{msg}" : msg
+            next
+          end
+
+          if has_local_drift
+            drift_pushes += 1
+          else
+            provisioning_pushes += 1
+          end
+
           dry_run("Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}") do
             puts "repo.branch #{repo.branch}" if verbose
 
@@ -407,7 +439,9 @@ module Cimas
 
             # Still push even if there was no commit, as the remote branch
             # may have been deleted. If the remote branch is deleted we can't
-            # make PRs in the next stage.
+            # make PRs in the next stage. (Guard above ensures this branch
+            # only runs when either the wd has drift OR the remote branch is
+            # actually missing.)
             begin
               if force_push
                 puts "Force-pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}."
@@ -427,7 +461,28 @@ module Cimas
           end
         end
 
+        puts ""
+        puts "Push summary:"
+        puts "  Pushed with drift:                              #{drift_pushes}"
+        puts "  Pushed empty (wave branch missing on remote):   #{provisioning_pushes}"
+        puts "  Skipped no-op (wave branch already on remote):  #{skipped_no_op}"
+
         # run_cmd("git -C #{repos_path} multi -c add appveyor.yml")
+      end
+
+      def wd_has_drift?(repo_dir)
+        result = `git -C #{repo_dir} status --porcelain 2>/dev/null`
+        !result.strip.empty?
+      rescue StandardError
+        false
+      end
+
+      def remote_has_branch?(g, branch)
+        remote_name = g.remotes.first.name
+        result = `git -C #{g.dir.path} ls-remote --heads #{remote_name} #{branch} 2>/dev/null`
+        !result.strip.empty?
+      rescue StandardError
+        false
       end
 
       # Label + comment (+ optionally close) a superseded prior-wave PR.
