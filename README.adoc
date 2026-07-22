@@ -80,10 +80,34 @@ contain master files for CI configuration.
 It is advisable to store the directory in Git for better version management.
 
 For example, with https://github.com/metanorma[Metanorma] repositories,
-the CI master configuration directory is placed in the
-https://github.com/metanorma/metanorma-build-scripts[`metanorma-build-scripts`]
-repository under `cimas-config/`.
+the CI master configuration directory is at
+https://github.com/metanorma/ci[`metanorma/ci`] under `cimas-config/`.
+(Historical note: prior to 2024 this lived in
+https://github.com/metanorma/metanorma-build-scripts[`metanorma-build-scripts`];
+older documentation may still reference that location.)
 
+
+=== Setting the `GITHUB_TOKEN` environment variable
+
+Cimas needs a GitHub token to look up per-repo visibility (public vs.
+private) when the CI configuration file uses visibility-driven template
+selection (see the `metanorma/metanorma-docker` template selection in
+https://github.com/metanorma/ci/issues/347[`metanorma/ci#347`] Option B).
+
+Without the token, `cimas sync` prints a warning per repo and defaults
+to `private` template picks — safe (won't clobber public repos with
+private templates), but the sync is inaccurate for public repos.
+
+Set the token before running any sub-command that touches remotes or
+inspects visibility:
+
+[source,sh]
+----
+export GITHUB_TOKEN=$(gh auth token)
+----
+
+`gh auth token` reuses the token the local `gh` CLI is authenticated
+with. Alternatively, export an explicit PAT with `repo` scope.
 
 
 == Usage
@@ -103,12 +127,30 @@ Cimas works through the `cimas` executable. `cimas` provides the following sub-c
 * `lint` (disabled right now)
 
 
-==== Sub-command options
+==== Global options (must appear _before_ the sub-command name)
 
-These options work across all sub-commands:
+* `--dry-run`: Skips destructive/remote operations (branches, pushes,
+  PR opens, deletes); prints what would be done instead. Applies to
+  `sync`, `pull`, `push`, `open-prs`, `cleanup-*`.
+* `-v` / `--verbose` (currently disabled).
 
-* `-d` or `--dry-run`: Does not perform any destructive behavior.
-* `-v` (disabled for now)
+[WARNING]
+====
+`--dry-run` is a **global** option, not a sub-command option. It must
+appear **before** the sub-command name, or `OptionParser` rejects it
+with `invalid option: --dry-run`:
+
+* ✅ `cimas --dry-run push -r ... -f ... -b ...`
+* ❌ `cimas push --dry-run -r ... -f ... -b ...`
+====
+
+[NOTE]
+====
+Do not confuse `--dry-run` with `-d`. `-d` is a **sub-command** option
+on `sync` and `diff` — it stands for `--master-path` (the CI
+configuration master directory), not for dry-run. See per-sub-command
+flag lists below.
+====
 
 
 ==== `cimas setup`
@@ -356,6 +398,157 @@ cimas sync -f {cimas-config-file} -r {cimas-working-area} \
 # cimas for-each -f cimas.yml -r ~/src/cimas-wd \
 #   -c "git rm .github/workflows/windows.yml"
 ----
+
+
+==== End-to-end workflow: drift audit → preview → push
+
+The full sequence for a "`sync + push a wave of drift corrections`"
+operation is `setup` → `sync` → `diff` → `push`. Each sub-command has
+its own required flags, so the full sequence is worth banking in one
+place.
+
+*Prerequisites for this workflow:*
+
+* `GITHUB_TOKEN` exported (see prerequisites above).
+* A checkout of the CI configuration master directory (e.g.
+  `metanorma/ci` for Metanorma). Below assume it lives at
+  `../ci/cimas-config/`.
+* A fresh work-dir (e.g. `../cimas-wd-YYYY-MM-DD`).
+
+*Step 1 — create the work-dir.*
+
+[source,sh]
+----
+mkdir ../cimas-wd-2026-07-22
+----
+
+*Step 2 — `setup`: clone every mapped repo into the work-dir.*
+
+[source,sh]
+----
+cimas setup \
+  -r ../cimas-wd-2026-07-22 \
+  -f ../ci/cimas-config/cimas.yml
+----
+
+Setup does not need `-d` (it only clones; it doesn't apply templates).
+
+*Step 3 — `sync`: apply templates to each cloned repo locally.*
+
+[source,sh]
+----
+cimas sync \
+  -r ../cimas-wd-2026-07-22 \
+  -f ../ci/cimas-config/cimas.yml \
+  -d ../ci/cimas-config
+----
+
+Both `-r` (work-dir), `-f` (cimas.yml), and `-d` (master path) are
+required for `sync`. Missing `-d` produces
+`[ERROR] config_master_path not set, aborting.`
+
+*Step 4 — `cimas diff`: preview the aggregated diff. This is the primary
+preview mechanism.*
+
+[source,sh]
+----
+cimas diff \
+  -r ../cimas-wd-2026-07-22 \
+  -f ../ci/cimas-config/cimas.yml \
+  -d ../ci/cimas-config
+----
+
+Same three flags as `sync`. Prints `git diff` output per drifted repo.
+This is the decision surface — read it and decide which classes to
+propagate, and which should become opt-out entries in `cimas.yml`.
+Repos with no drift show no diff at all.
+
+*Quick count of repos with actual drift (post-sync, pre-push):*
+
+[source,sh]
+----
+cd ../cimas-wd-2026-07-22 && for d in */; do
+  [ -n "$(git -C "$d" status --porcelain 2>/dev/null)" ] && echo "${d%/}"
+done | tee /tmp/drifted-repos.txt | wc -l
+----
+
+Useful because `cimas push` (and `cimas --dry-run push`) will report
+work against *every* mapped repo regardless of drift (see gotcha
+below); this one-liner isolates the actually-drifted subset.
+
+[NOTE]
+====
+The `-b` and `-m` push options are shown in the `cimas push` reference
+above; they are required (`-b`) / recommended (`-m`) for real pushes,
+but not required for a `cimas diff` preview.
+====
+
+*Step 5 — real push (only after diff review).*
+
+[source,sh]
+----
+cimas push \
+  -r ../cimas-wd-2026-07-22 \
+  -f ../ci/cimas-config/cimas.yml \
+  -b cimas-sync-2026-07-22 \
+  -m "cimas: sync <date> drift-audit findings"
+----
+
+Creates `cimas-sync-2026-07-22` on each mapped repo and pushes it. Does
+NOT open PRs — that's `cimas open-prs` as a separate step.
+
+[IMPORTANT]
+====
+`cimas push` provisions the wave branch on **every mapped repo**, not
+only on drifted ones (see command.rb:405-410 for the rationale — the
+next-stage `cimas open-prs` needs the branch to exist on every repo it
+might open a PR against). This means:
+
+* The count of "`pushed branches`" is much larger than the count of
+  actually-changed repos. A wave with ~95 drifted repos may push
+  ~150+ branches, most of them no-ops.
+* Every branch push notifies watchers on that repo, including no-op
+  branches. Ronald and other maintainers of many repos will receive
+  one notification per repo, not one per real change. This is a design
+  cost worth budgeting for.
+* `cimas --dry-run push` inherits the same shape — it lists every
+  would-be-pushed branch, including the no-ops. **Do not use `--dry-run
+  push` as your primary preview of "`what actually changes`"; use
+  `cimas diff` for that.**
+
+Mitigations for future waves:
+
+* Split by `-g GROUP` to spread the notification burst across
+  multiple sub-waves and days.
+* File a feature request for a `--skip-no-drift` option on `push` if
+  the notification cost becomes prohibitive.
+====
+
+*Step 6 — open PRs (optional; only for the drift-having branches).*
+
+See the `cimas open-prs` section above for the full flag list.
+
+.Required-flag matrix per sub-command
+[cols="1,1,1,1,1,1", options="header"]
+|===
+| Sub-command | `-r` | `-f` | `-d` | `-b` | `-m`
+| `setup`     | ✅   | ✅   |      |      |
+| `sync`      | ✅   | ✅   | ✅   |      |
+| `diff`      | ✅   | ✅   | ✅   |      |
+| `push`      | ✅   | ✅   |      | ✅   | (recommended)
+| `open-prs`  | ✅   | ✅   |      | ✅   | (recommended)
+|===
+
+.Gotchas summary
+[cols="1,3", options="header"]
+|===
+| Gotcha | Symptom
+| Missing `-d` on `sync`/`diff` | `[ERROR] config_master_path not set, aborting.`
+| Missing `-b` on `push`/`open-prs` | `missing argument: Missing -b/--push-branch value`
+| `--dry-run` placed after sub-command | `invalid option: --dry-run (OptionParser::InvalidOption)`
+| Missing `GITHUB_TOKEN` | `[WARNING] Visibility fetch failed ...; defaulting to \`private\` (safer).` — sync is inaccurate for public repos.
+| `--dry-run push` count includes no-op branches | Push count much larger than actual drift; use `cimas diff` to preview real changes.
+|===
 
 
 == Configuration
