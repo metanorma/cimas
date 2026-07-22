@@ -368,7 +368,6 @@ module Cimas
         sanity_check
 
         drift_pushes = 0
-        provisioning_pushes = 0
         skipped_no_op = 0
 
         filtered_repo_names.each do |repo_name|
@@ -387,32 +386,30 @@ module Cimas
 
           g = Git.open(repo_dir)
 
-          # Skip pure no-op pushes: no drift AND the wave branch already
-          # exists on remote. The historical "always push even without
-          # changes" behavior was there to guard against the branch having
-          # been deleted on remote (open-prs needs it to exist). Checking
-          # ls-remote beforehand satisfies the same invariant without
-          # generating notification noise for the 30-60% of mapped repos
-          # that have no drift on any given wave.
+          # Skip repos with no drift. The historical "always push even
+          # without changes" behavior was there to guarantee the wave
+          # branch exists on remote for the next-stage `cimas open-prs`.
+          # But open_prs already handles missing wave branches gracefully
+          # (see the /field: head\s+code: invalid/ rescue in
+          # `open_prs`, which skips with a WARNING) and also handles the
+          # "branch present but empty PR" case (/message: No commits
+          # between/). So we can safely skip pushing wave branches for
+          # repos that have no drift — the whole no-op notification-noise
+          # class disappears without breaking open_prs.
           #
           # Assumes `cimas sync` has been run against this work-dir first,
           # so wd status reflects the drift state (matches the ordering
           # documented in README "End-to-end workflow").
           has_local_drift = wd_has_drift?(repo_dir)
-          remote_branch_exists = remote_has_branch?(g, push_to_branch)
 
-          if !has_local_drift && remote_branch_exists
+          unless has_local_drift
             skipped_no_op += 1
-            msg = "Skipping no-op push to #{repo_name} (no drift; wave branch #{push_to_branch} already on remote)"
+            msg = "Skipping no-op push to #{repo_name} (no drift)"
             puts config['dry_run'] ? "dry run: #{msg}" : msg
             next
           end
 
-          if has_local_drift
-            drift_pushes += 1
-          else
-            provisioning_pushes += 1
-          end
+          drift_pushes += 1
 
           dry_run("Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}") do
             puts "repo.branch #{repo.branch}" if verbose
@@ -463,23 +460,14 @@ module Cimas
 
         puts ""
         puts "Push summary:"
-        puts "  Pushed with drift:                              #{drift_pushes}"
-        puts "  Pushed empty (wave branch missing on remote):   #{provisioning_pushes}"
-        puts "  Skipped no-op (wave branch already on remote):  #{skipped_no_op}"
+        puts "  Pushed with drift: #{drift_pushes}"
+        puts "  Skipped (no drift): #{skipped_no_op}"
 
         # run_cmd("git -C #{repos_path} multi -c add appveyor.yml")
       end
 
       def wd_has_drift?(repo_dir)
         result = `git -C #{repo_dir} status --porcelain 2>/dev/null`
-        !result.strip.empty?
-      rescue StandardError
-        false
-      end
-
-      def remote_has_branch?(g, branch)
-        remote_name = g.remotes.first.name
-        result = `git -C #{g.dir.path} ls-remote --heads #{remote_name} #{branch} 2>/dev/null`
         !result.strip.empty?
       rescue StandardError
         false
