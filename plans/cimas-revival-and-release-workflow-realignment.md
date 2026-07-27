@@ -2117,3 +2117,42 @@ This is a **class**, not an incident. Any `actions/*@vN` reaching EOL upstream p
 Mitigation shape: a periodic org-wide `actions/*` version audit — a cron-scheduled workflow in `metanorma/ci` that enumerates all `uses: actions/*@vN` pins across cimas-managed repos, lists any at deprecated majors, and emits `$GITHUB_STEP_SUMMARY` + optional issue-create. Frequency: quarterly likely sufficient given GitHub's typical 6+ month deprecation windows. Tracking ticket to open after this sweep merges; fold into the observability triplet ([`metanorma/ci#302`](https://github.com/metanorma/ci/issues/302)) roadmap.
 
 🤖
+
+---
+
+## 2026-07-25: `metanorma/ci` reusable workflows are generic; `cimas` scope is metanorma-only
+
+Business-context clarification that reshapes the cimas-revival architecture. `metanorma/ci` reusable workflows are **generic** — consumed both by metanorma-org gems (currently via cimas-managed template distribution) AND by an unknown number of **standalone consumers outside the metanorma org**. `cimas` is **metanorma-only** — a metanorma-specific overlay that uses ci's reusables to distribute templates to metanorma-org repos. The two are not architecturally bound: ci reusables are the universal release path; cimas is one particular consumer-population managing itself.
+
+Corroboration from [`metanorma/ci#370`](https://github.com/metanorma/ci/issues/370) (2026-07-25):
+
+- Lesson 2: *"Check the blast radius — across both consumer populations. ... Adding opt-out machinery that's only reachable through cimas is not a substitute for a sensible default."*
+- Lesson 3: *"Migration paths must reach non-cimas consumers. When the shared workflow changes behavior, the announcement vector cannot be just cimas.yml updates. The README and docs/rubygems-release.md are the universal channel."*
+
+### Composition with the cimas#68 conversion arc
+
+The [`metanorma/cimas#68`](https://github.com/metanorma/cimas/issues/68) conversion arc moves cimas-managed metanorma-org repos from **copied-stub workflow files** to **`uses:` references at `@v1`**. Post-conversion, each converted metanorma consumer looks structurally identical to a standalone consumer — it consumes `metanorma/ci/.github/workflows/*.yml@v1` directly, rather than through a cimas-owned copy.
+
+### Post-conversion end state
+
+- **`metanorma/ci`** — universal release path. Reusables serve both cimas-managed metanorma repos and standalone consumers indistinguishably. Design decisions on ci reusables must satisfy both populations (blast-radius rule per ci#370 lesson 2).
+- **`cimas`** — metanorma-only config manager. Scope shrinks to what's genuinely metanorma-specific: which gems exist, version-tracking, metanorma-org-specific config coordination. **Workflow file distribution stops being cimas's job** because consumers reference reusables directly.
+- **The consumer conversion (canaries) is the mechanism** by which each metanorma-org consumer moves from "cimas-fleet-managed workflow files" to "generic consumer of ci reusables." Not a change to what ci is; a change to how metanorma repos consume it.
+
+This composes cleanly with the architectural direction established in ci#370: pushback on cross-fleet imposition from a shared workflow is coherent with the conversion arc, which moves control into each consumer's own workflow file rather than imposing behaviour fleet-wide.
+
+### Actionable implications
+
+1. **Design work on ci reusables** (ci#369 change-detector, RubyGems trusted-publishing migration, any future ci-reusable changes) must satisfy the generic-consumer + blast-radius rules. Opt-in defaults, wrapper-friendly, no cimas-only enforcement paths.
+2. **cimas-config changes** (cimas.yml unmap commits per canary, future cimas.yml-scope work) legitimately affect only metanorma-org repos; scope is contained by the metanorma-only cimas frame.
+3. **Documentation channel matters** — when ci reusable behavior changes, README + `docs/rubygems-release.md` are the universal announcement channel. cimas release notes are metanorma-only and won't reach standalone consumers.
+4. **Post-#371 `rubygems-release.yml` is simpler and consumer-agnostic** — the two-phase gated relay's removal (which required cimas-side wiring to fire correctly) means atomic publish on `workflow_dispatch` works for both cimas-managed and standalone consumers without additional wiring. This is the shape the end-goal converges toward.
+
+### Canary sequencing status (2026-07-27)
+
+- **Canary #1** (`rake.yml`) — merged.
+- **Canary #2** (`release.yml`, [`metanorma-cc#510`](https://github.com/metanorma/metanorma-cc/pull/510)) — merged 2026-07-27.
+- **Canary #3** (`release_github_packages.yml`, [`metanorma-bsi#631`](https://github.com/metanorma/metanorma-bsi/pull/631)) — merged 2026-07-27.
+- **Future canaries** (`rubocop.yml`, `automerge.yml`, other cimas-managed workflow files across the fleet): same pattern — convert consumer to `uses: @v1`, remove from cimas.yml, done. No ci-scope revision needed for these mechanical conversions.
+
+🤖
