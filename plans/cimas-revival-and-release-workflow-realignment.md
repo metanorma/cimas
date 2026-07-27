@@ -2094,3 +2094,26 @@ Repo-layer fix pattern (landed on metanorma-cli#440):
 Open follow-up: fix at the template layer (the rubocop workflow template must provide the plugin gems whenever the synced `.rubocop.yml` declares them), then sweep the 2026-07-05 wave repos — metanorma-taste is confirmed to have the identical gap. Design rule going forward: a sync wave that ships a config referencing gems must ship the gem provisioning in the same wave.
 
 🤖
+
+---
+
+## 2026-07-27: `upload-artifact@v3` deprecation sweep + cimas TEMPLATE identified as rot vector
+
+GitHub's deprecation of `actions/upload-artifact@v3` and `download-artifact@v3` (soft-removal in progress; hard-removal announced Q1 2026) prompted an org-wide audit that identified **7 active `metanorma/*` repos** still pinned to `@v3` in their workflows, plus `metanorma/ci`'s own cimas TEMPLATE for `pngcheck-ruby` — the upstream propagator.
+
+PRs fired:
+
+- [`metanorma/ci#374`](https://github.com/metanorma/ci/pull/374) — cimas TEMPLATE `pngcheck-ruby.yml` bumped from `@v3` to `@v4`. **Root fix**; without it, every subsequent cimas sync re-propagates the deprecated pin into consumer workflows.
+- [`metanorma/mn-samples-itu#172`](https://github.com/metanorma/mn-samples-itu/pull/172) — `@v3` → `@v4`, plus a Ruby-stdlib fix commit (erb/rdoc/irb) that also unblocks its `#171`.
+- [`metanorma/iso-10303-2#332`](https://github.com/metanorma/iso-10303-2/pull/332), [`metanorma/X.icd-schemas#14`](https://github.com/metanorma/X.icd-schemas/pull/14), [`metanorma/iso-ics-codes#11`](https://github.com/metanorma/iso-ics-codes/pull/11), [`metanorma/ieee-p2874#5`](https://github.com/metanorma/ieee-p2874/pull/5) — mechanical `@v3` → `@v4`.
+- [`metanorma/pngcheck-ruby#37`](https://github.com/metanorma/pngcheck-ruby/pull/37) — substantive: `upload-artifact@v4` enforces artifact-name uniqueness, so the parallelised OS matrix required unique upload names (`os` in the name) + downloads switched to `pattern:` + `merge-multiple: true`.
+
+**Structural lesson — deprecated action pins in cimas TEMPLATES propagate rot by design.**
+
+The 6 consumer-repo PRs are 6 instances of one root defect. The cimas TEMPLATE was carrying the deprecated pin, and every `cimas sync` wave stamps it into consumer workflows; the consumer PRs are downstream cleanup, `ci#374` is the root fix.
+
+This is a **class**, not an incident. Any `actions/*@vN` reaching EOL upstream propagates through the same channel and lands as fleet-wide silent rot until an org-wide audit surfaces it. Related class rot vectors already recorded in this arc: rubocop-plugins-synced-without-gems (2026-07-21), `rake.yml` broader-orphan-cleanup deletion propagating fleet-wide (2026-07-20). All three are cimas-side artefacts producing fleet-wide effects when unaudited.
+
+Mitigation shape: a periodic org-wide `actions/*` version audit — a cron-scheduled workflow in `metanorma/ci` that enumerates all `uses: actions/*@vN` pins across cimas-managed repos, lists any at deprecated majors, and emits `$GITHUB_STEP_SUMMARY` + optional issue-create. Frequency: quarterly likely sufficient given GitHub's typical 6+ month deprecation windows. Tracking ticket to open after this sweep merges; fold into the observability triplet ([`metanorma/ci#302`](https://github.com/metanorma/ci/issues/302)) roadmap.
+
+🤖
