@@ -359,21 +359,21 @@ module Cimas
       end
 
       # Remote-mutating subcommands refuse to run unless -g is given and
-      # resolves to at least one repository. Raises OptionParser errors so
+      # resolves to at least one repository. Raises Cimas::Cli::Error so
       # the CLI reports a clean message without a backtrace.
       def require_explicit_scope!(command_name)
         return unless self.class.remote_mutating?(command_name, config)
 
         groups = config['groups']
         if groups.nil?
-          raise OptionParser::MissingArgument,
+          raise Cimas::Cli::Error,
                 "#{command_name}: no -g given — would target all " \
                 "#{repositories.size} repositories in #{config['config_file_path']}. " \
                 "Pass -g <group(s)> or -g <repo-name> to scope, or -g all to " \
                 "target the whole fleet deliberately."
         end
         if groups.empty?
-          raise OptionParser::InvalidArgument,
+          raise Cimas::Cli::Error,
                 "#{command_name}: -g given but empty (e.g. `-g ''`) — pass " \
                 "-g <group(s)>, -g <repo-name>, or -g all to target the " \
                 "whole fleet deliberately."
@@ -381,7 +381,7 @@ module Cimas
 
         names = filtered_repo_names
         if names.empty?
-          raise OptionParser::InvalidArgument,
+          raise Cimas::Cli::Error,
                 "#{command_name}: -g #{Array(groups).join(',')} resolves to 0 " \
                 "repositories in #{config['config_file_path']} — check the " \
                 "groups: section or the repo name."
@@ -396,7 +396,7 @@ module Cimas
         return if missing.empty?
 
         flags = missing.map { |key| OPTION_FLAGS.fetch(key, key) }.join(', ')
-        raise OptionParser::MissingArgument,
+        raise Cimas::Cli::Error,
               "#{command_name}: missing required option(s): #{flags}"
       end
 
@@ -445,7 +445,8 @@ module Cimas
         msg = required_option('commit_message', '-m/--message')
         unless msg.include? "request-checks:"
           # https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/about-status-checks#checks
-          msg << "\n\nrequest-checks: true"
+          # Thor freezes option strings — never mutate, always rebuild.
+          msg = "#{msg}\n\nrequest-checks: true"
         end
         msg
       end
@@ -686,7 +687,7 @@ module Cimas
         # NameError on the very first `open-prs` invocation before any PR
         # could be created.
         if config['pr_body_file'] && config['pr_body']
-          raise OptionParser::InvalidArgument, "--body and --body-file are mutually exclusive"
+          raise Cimas::Cli::Error, "--body and --body-file are mutually exclusive"
         end
         # Force UTF-8 on file read: locale-default (US-ASCII on some Ruby
         # configs) mis-tags the string, and Octokit → Sawyer → JSON.dump
@@ -1187,7 +1188,7 @@ module Cimas
 
       def required_option(key, flag)
         value = config[key]
-        raise OptionParser::MissingArgument, "Missing #{flag} value" if value.nil?
+        raise Cimas::Cli::Error, "Missing #{flag} value" if value.nil?
 
         value
       end

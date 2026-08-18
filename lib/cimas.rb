@@ -1,3 +1,5 @@
+require "pathname"
+
 module Cimas
   # Ownership marker cimas writes into every file it generates and
   # detects when deciding whether a file is cimas-managed (orphan

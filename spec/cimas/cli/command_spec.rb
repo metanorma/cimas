@@ -18,6 +18,13 @@ RSpec.describe Cimas::Cli::Command do
     end
   end
 
+  it "appends request-checks without mutating a frozen message" do
+    command = Cimas::Cli::Command.new(options("placeholder"))
+    command.config["commit_message"] = "frozen wave".freeze
+
+    expect(command.commit_message).to eq("frozen wave\n\nrequest-checks: true")
+  end
+
   describe "apply_patches" do
     let(:tmp_root) { Dir.mktmpdir("cimas-patches-spec") }
     let(:repo_name) { "metanorma-cli" }
@@ -278,42 +285,42 @@ RSpec.describe Cimas::Cli::Command do
       command = build_command
 
       expect { command.execute("push") }
-        .to raise_error(OptionParser::MissingArgument, /would target all 2 repositories/)
+        .to raise_error(Cimas::Cli::Error, /would target all 2 repositories/)
     end
 
     it "refuses open-prs without -g before touching the GitHub API" do
       command = build_command
 
       expect { command.execute("open-prs") }
-        .to raise_error(OptionParser::MissingArgument, /no -g given/)
+        .to raise_error(Cimas::Cli::Error, /no -g given/)
     end
 
     it "refuses cleanup-merged-prs without -g" do
       command = build_command
 
       expect { command.execute("cleanup-merged-prs") }
-        .to raise_error(OptionParser::MissingArgument, /cleanup-merged-prs: no -g given/)
+        .to raise_error(Cimas::Cli::Error, /cleanup-merged-prs: no -g given/)
     end
 
     it "refuses cleanup-closed-prs without -g" do
       command = build_command
 
       expect { command.execute("cleanup-closed-prs") }
-        .to raise_error(OptionParser::MissingArgument, /cleanup-closed-prs: no -g given/)
+        .to raise_error(Cimas::Cli::Error, /cleanup-closed-prs: no -g given/)
     end
 
     it "refuses for-each without -g (arbitrary shell has push-scale blast radius)" do
       command = build_command
 
       expect { command.execute("for-each") }
-        .to raise_error(OptionParser::MissingArgument, /for-each: no -g given/)
+        .to raise_error(Cimas::Cli::Error, /for-each: no -g given/)
     end
 
     it "refuses an empty -g (e.g. `-g ''`) instead of silently doing nothing" do
       command = build_command(with_groups: true, extra: { "groups" => [] })
 
       expect { command.execute("push") }
-        .to raise_error(OptionParser::InvalidArgument, /-g given but empty/)
+        .to raise_error(Cimas::Cli::Error, /-g given but empty/)
     end
 
     it "refuses a -g group that resolves to zero repositories" do
@@ -324,7 +331,7 @@ RSpec.describe Cimas::Cli::Command do
       )
 
       expect { command.execute("push") }
-        .to raise_error(OptionParser::InvalidArgument, /resolves to 0 repositories/)
+        .to raise_error(Cimas::Cli::Error, /resolves to 0 repositories/)
     end
 
     it "leaves cleanup-orphan-files unguarded without --push-after (local-only)" do
@@ -338,7 +345,7 @@ RSpec.describe Cimas::Cli::Command do
       command = build_command(extra: { "cleanup_push_after" => true })
 
       expect { command.execute("cleanup-orphan-files") }
-        .to raise_error(OptionParser::MissingArgument, /cleanup-orphan-files: no -g given/)
+        .to raise_error(Cimas::Cli::Error, /cleanup-orphan-files: no -g given/)
     end
 
     it "leaves local-only commands unguarded without -g" do
@@ -436,7 +443,7 @@ RSpec.describe Cimas::Cli::Command do
       command = build_command
 
       expect { command.execute("push") }
-        .to raise_error(OptionParser::MissingArgument,
+        .to raise_error(Cimas::Cli::Error,
                         /push: missing required option\(s\): -b\/--push-branch, -m\/--message/)
     end
 
@@ -444,19 +451,19 @@ RSpec.describe Cimas::Cli::Command do
       command = build_command
 
       expect { command.execute("for-each") }
-        .to raise_error(OptionParser::MissingArgument, /-c\/--shell-cmd/)
+        .to raise_error(Cimas::Cli::Error, /-c\/--shell-cmd/)
     end
 
     it "fails fast on release-preflight without --repo" do
       command = build_command
 
       expect { command.execute("release-preflight") }
-        .to raise_error(OptionParser::MissingArgument, /missing required option\(s\): --repo/)
+        .to raise_error(Cimas::Cli::Error, /missing required option\(s\): --repo/)
     end
 
     it "requires -b/-m on cleanup-orphan-files only under --push-after" do
       expect { build_command("cleanup_push_after" => true).execute("cleanup-orphan-files") }
-        .to raise_error(OptionParser::MissingArgument, /-b\/--push-branch, -m\/--message/)
+        .to raise_error(Cimas::Cli::Error, /-b\/--push-branch, -m\/--message/)
 
       # Local-only mode needs neither: validation passes; the loop just
       # skips the missing clone.
