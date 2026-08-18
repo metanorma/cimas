@@ -124,7 +124,6 @@ Cimas works through the `cimas` executable. `cimas` provides the following sub-c
 * `pull`
 * `open-prs`
 * `for-each`
-* `lint` (disabled right now)
 
 
 ==== Global options (must appear _before_ the sub-command name)
@@ -150,6 +149,24 @@ Do not confuse `--dry-run` with `-d`. `-d` is a **sub-command** option
 on `sync` and `diff` — it stands for `--master-path` (the CI
 configuration master directory), not for dry-run. See per-sub-command
 flag lists below.
+====
+
+[WARNING]
+====
+`push`, `open-prs`, `cleanup-merged-prs`, `cleanup-closed-prs`,
+`for-each` and `cleanup-orphan-files --push-after` **refuse to run
+without `-g`**.
+These commands mutate remote state — provisioning branches, opening PRs,
+deleting branches, or (for `for-each`) running arbitrary shell in every
+repo — and without `-g` their scope is every repository in `cimas.yml`,
+which fans a wave out to repos unrelated to its purpose.
+Pass `-g <group(s)>` or `-g <repo-name>` to scope; `-g all` targets the
+whole fleet deliberately. An empty `-g` (e.g. `-g ''`) or a group that
+resolves to zero repositories is also refused — a silent 0-repo no-op is
+never what you meant. Every guarded command prints a pre-flight
+`Scope for <command>: N repo(s): ...` line so the blast radius is
+visible before anything happens. Local-only commands (`sync`, `pull`,
+`diff`) are unaffected and still default to all repositories.
 ====
 
 
