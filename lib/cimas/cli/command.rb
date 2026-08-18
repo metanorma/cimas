@@ -1,20 +1,28 @@
-require 'json'
 require 'yaml'
-require 'net/http'
 require 'git'
-require_relative '../repository'
 require 'octokit'
 require 'ostruct'
+require 'erb'
+require 'fileutils'
+require 'set'
+require 'open3'
 
 module Cimas
   module Cli
     class Command
-      attr_accessor :github_client, :config
+      # Writers only: the readers are explicit methods below (an
+      # attr_accessor reader here would be silently shadowed by them).
+      attr_writer :github_client, :config
 
       DEFAULT_CONFIG = {
         'dry_run' => false,
         'verbose' => false,
-        'groups' => ['all'],
+        # nil, not ['all']: defaulting a wave to the whole fleet is how a
+        # forgotten -g fans branches/PRs out to every repo in the config.
+        # filtered_repo_names still falls back to all repos for local-only
+        # commands; remote-mutating ones refuse at dispatch (see COMMANDS
+        # and `execute`).
+        'groups' => nil,
         'force_push' => false,
         'assignees' => [],
         'reviewers' => [],
@@ -24,12 +32,91 @@ module Cimas
         'cooldown_time' => 3 * 60
       }
 
+      # One registry entry per subcommand, the single classification that
+      # drives dispatch-time behavior:
+      #   :remote_mutating — refuses to run without an explicit -g and
+      #     prints a pre-flight scope line (provision branches, open PRs,
+      #     delete branches, run arbitrary shell).
+      #   :remote_mutating_if — same, but only when the mapped config
+      #     flag opts in.
+      #   :requires — config keys that must be set; validated eagerly at
+      #     dispatch so a missing -b/-m fails fast instead of exiting 0
+      #     when every repo happens to be skipped.
+      #   :requires_if — additional required keys under a config flag.
+      # Adding a subcommand = adding one entry here.
+      COMMANDS = {
+        'setup'                => {},
+        'sync'                 => {},
+        'diff'                 => {},
+        'pull'                 => {},
+        'push'                 => {
+          remote_mutating: true,
+          requires: %w[push_to_branch commit_message],
+        },
+        'open-prs'             => {
+          remote_mutating: true,
+          requires: %w[merge_branch pr_message],
+        },
+        'for-each'             => {
+          remote_mutating: true,
+          requires: %w[shell_cmd],
+        },
+        'cleanup-merged-prs'   => {
+          remote_mutating: true,
+          requires: %w[push_to_branch],
+        },
+        'cleanup-closed-prs'   => { remote_mutating: true },
+        'cleanup-orphan-files' => {
+          remote_mutating_if: 'cleanup_push_after',
+          requires_if: ['cleanup_push_after', %w[push_to_branch pr_message]],
+        },
+        'release-preflight'    => { requires: %w[target_repo] },
+      }.freeze
+
+      # Config key → CLI flag spelling, for required-option messages.
+      OPTION_FLAGS = {
+        'push_to_branch' => '-b/--push-branch',
+        'commit_message' => '-m/--message',
+        'merge_branch' => '-b/--merge-branch',
+        'pr_message' => '-m/--message',
+        'shell_cmd' => '-c/--shell-cmd',
+        'target_repo' => '--repo',
+      }.freeze
+
+      # How many repository names the pre-flight scope line lists before
+      # collapsing to a count.
+      SCOPE_LIST_LIMIT = 30
+
+      def self.command_meta(command_name)
+        COMMANDS[command_name] || {}
+      end
+
+      def self.remote_mutating?(command_name, config = {})
+        meta = command_meta(command_name)
+        return true if meta[:remote_mutating]
+
+        flag = meta[:remote_mutating_if]
+        !flag.nil? && config[flag] == true
+      end
+
+      def self.missing_required_options(command_name, config)
+        meta = command_meta(command_name)
+        required = meta[:requires] || []
+        flag, conditional = meta[:requires_if] || [nil, []]
+        required += conditional if flag && config[flag] == true
+        required.reject { |key| config[key] }
+      end
+
       def initialize(options)
         unless options['config_file_path'].exist?
           raise "[ERROR] config_file_path #{options['config_file_path']} does not exist, aborting."
         end
 
-        @data = YAML.load(IO.read(options['config_file_path']))
+        @data = YAML.load(File.read(options['config_file_path'])) || {}
+
+        unless repositories.is_a?(Hash) && !repositories.empty?
+          raise "[ERROR] no `repositories:` section in #{options['config_file_path']} — nothing to operate on, aborting."
+        end
 
         @config = DEFAULT_CONFIG.merge(settings || {}).merge(options)
 
@@ -42,12 +129,26 @@ module Cimas
         end
       end
 
+      # Single dispatch entrypoint (`exe/cimas` calls this). Scope guard,
+      # required-option validation and the scope announcement all derive
+      # from the one COMMANDS classification, so every remote-mutating
+      # subcommand is guarded AND announces its blast radius uniformly,
+      # and every required flag fails fast — before any repo iteration.
+      # Calling a subcommand method directly bypasses the guard by design
+      # — it protects CLI operators, not library callers.
+      def execute(command_name)
+        require_explicit_scope!(command_name)
+        validate_required_options!(command_name)
+        announce_scope(command_name) if self.class.remote_mutating?(command_name, config)
+
+        public_send(command_name.tr('-', '_'))
+      end
+
       def settings
         data['settings']
       end
 
       def github_client
-        require 'octokit'
         if config['github_token'].nil?
           raise "[ERROR] Please set GITHUB_TOKEN environment variable to use GitHub functions."
         end
@@ -65,7 +166,6 @@ module Cimas
       def setup
         repositories.each_pair do |repo_name, attribs|
           repo_dir = File.join(repos_path, repo_name)
-          # puts "attribs #{attribs.inspect}"
           unless File.exist?(repo_dir) && File.exist?(File.join(repo_dir, '.git'))
             puts "Git cloning #{repo_name} from #{attribs['remote']}..."
             Git.clone(attribs['remote'], repo_name, path: repos_path)
@@ -89,7 +189,9 @@ module Cimas
 
         return true if unsynced.empty?
 
-        warn "[ERROR] These repositories have not been setup, please run `setup` first: #{unsynced.inspect}"
+        # Advisory only — execution continues (pure-API commands such as
+        # cleanup-merged-prs legitimately run with no clones present).
+        warn "[WARNING] These repositories have not been setup, please run `setup` first: #{unsynced.inspect}"
       end
 
       def config_master_path
@@ -114,19 +216,8 @@ module Cimas
           raise "[ERROR] config_master_path not set, aborting."
         end
 
-        filtered_repo_names.each do |repo_name|
-
-          repo = repo_by_name(repo_name)
-          if repo.nil?
-            puts "[WARNING] #{repo_name} not configured, skipping."
-            next
-          end
-
-          repo_dir = File.join(repos_path, repo_name)
-          unless File.exist?(repo_dir)
-            puts "[ERROR] #{repo_name} is missing in #{repos_path}, skipping sync for it."
-            next
-          end
+        each_target_repo('sync') do |repo, repo_dir|
+          repo_name = repo.name
 
           dry_run("Copying files to #{repo_name} and staging them") do
             g = Git.open(repo_dir)
@@ -146,25 +237,7 @@ module Cimas
               puts "file #{source_path} => #{target_path}" if verbose
 
               if source_path.end_with? ".erb"
-                # trim_mode: '-' honours <%- ... -%> and <%- ... -%> trim
-                # markers, so templates can render conditional blocks
-                # cleanly without stray blank lines. Backward-compatible:
-                # templates that don't use the '-' markers are unaffected.
-                template = ERB.new(File.read(source_path), trim_mode: "-")
-                temp_file = Tempfile.new
-                # Legacy `template: binding:` values are exposed as
-                # OpenStruct dot-notation methods (e.g. `<%= flavor %>`).
-                # The `with:` block (metanorma/ci#300 Gap 1) is exposed
-                # as `with_values` — a Hash — so ERB templates can access
-                # keys that aren't valid Ruby identifiers (e.g. `private-fonts`)
-                # via `<%= with_values['private-fonts'] %>`.
-                erb_context = repo.binding.merge(
-                  "with_values" => repo.with_values,
-                )
-                params = OpenStruct.new(erb_context).instance_eval { binding }
-                temp_file.puts(template.result(params))
-                temp_file.flush
-                copy_file(temp_file, target_path)
+                write_rendered(render_erb_template(source_path, repo), target_path)
               else
                 copy_file(source_path, target_path)
               end
@@ -175,7 +248,6 @@ module Cimas
             apply_patches(repo_name, repo_dir, g)
 
             if verbose
-              # Debugging to see if files have been changed
               g.status.changed.each do |file, status|
                 puts "Updated files in #{repo_name}:"
                 puts status.blob(:index).contents
@@ -186,23 +258,18 @@ module Cimas
       end
 
       def patches
-        data['patches'] || {}
+        (data['patches'] || {}).map { |name, attrs| Cimas::Patch.new(name, attrs) }
       end
 
       def apply_patches(repo_name, repo_dir, git)
-        patches.each do |patch_name, patch|
-          patch_groups = patch['groups'] || []
-          target_repo_names = patch_groups.flat_map { |g| group_repo_names(g) }.uniq
+        patches.each do |patch|
+          target_repo_names = patch.group_names.flat_map { |g| group_repo_names(g) }.uniq
           next unless target_repo_names.include?(repo_name)
 
-          globs = Array(patch['files'])
-          find_regex = Regexp.new(patch['find'])
-          replacement = patch['replace']
-
-          globs.each do |glob|
+          patch.globs.each do |glob|
             matched = Dir.glob(File.join(repo_dir, glob))
             if matched.empty?
-              puts "[WARNING] Patch '#{patch_name}' on #{repo_name}: no files matched glob '#{glob}'."
+              puts "[WARNING] Patch '#{patch.name}' on #{repo_name}: no files matched glob '#{glob}'."
               next
             end
 
@@ -216,21 +283,21 @@ module Cimas
               #     this patch wants to update is genuinely absent — e.g. a
               #     gemspec with no `required_ruby_version` line, the NOVER
               #     case). WARNING-level: maintainer may want to add the line.
-              #   - `find` matches but `gsub` produces identical text (the
+              #   - `find` matches but gsub produces identical text (the
               #     file is already at the target value). INFO-level: this is
               #     a normal idempotent no-op, not a problem.
-              unless find_regex.match?(original)
-                puts "[WARNING] Patch '#{patch_name}' on #{repo_name}:#{rel_path}: pattern not present in file (line absent — consider whether the patch should also handle insertion)."
+              unless patch.matches?(original)
+                puts "[WARNING] Patch '#{patch.name}' on #{repo_name}:#{rel_path}: pattern not present in file (line absent — consider whether the patch should also handle insertion)."
                 next
               end
 
-              updated = original.gsub(find_regex, replacement)
+              updated = patch.apply(original)
               if original == updated
-                puts "[INFO] Patch '#{patch_name}' on #{repo_name}:#{rel_path}: already at target value, no-op."
+                puts "[INFO] Patch '#{patch.name}' on #{repo_name}:#{rel_path}: already at target value, no-op."
                 next
               end
 
-              dry_run("Patching #{rel_path} in #{repo_name} (patch '#{patch_name}')") do
+              dry_run("Patching #{rel_path} in #{repo_name} (patch '#{patch.name}')") do
                 File.write(file_path, updated)
                 git.add(rel_path)
               end
@@ -242,68 +309,130 @@ module Cimas
       def diff
         sanity_check
 
-        filtered_repo_names.each do |repo_name|
-
-          repo = repo_by_name(repo_name)
-          if repo.nil?
-            puts "[WARNING] #{repo_name} not configured, skipping."
-            next
-          end
-
-          repo_dir = File.join(repos_path, repo_name)
-          unless File.exist?(repo_dir)
-            puts "[ERROR] #{repo_name} is missing in #{repos_path}, skipping diff for it."
-            next
-          end
-
+        each_target_repo('diff') do |repo, repo_dir|
           g = Git.open(repo_dir)
 
-          puts "======================= DIFF FOR #{repo_name} ========================="
-          # Debugging to see if files have been changed
+          puts "======================= DIFF FOR #{repo.name} ========================="
           diff = g.diff
           puts diff.patch
         end
       end
 
       def filtered_repo_names
-        return repositories unless config['groups']
-
-        config['groups'].inject([]) do |acc, group|
-          acc + group_repo_names(group)
-        end.uniq
+        @filtered_repo_names ||= if config['groups']
+                                   config['groups'].inject([]) do |acc, group|
+                                     acc + group_repo_names(group)
+                                   end.uniq
+                                 else
+                                   repositories.keys
+                                 end
       end
 
-      def repo_by_name(name)
-        Cimas::Repository.new(name, data["repositories"][name])
-      end
-
-      def pull
-        sanity_check
+      # Iterates the wave's resolved target repos, skipping any name that
+      # is not a configured repository (`-g typo` resolves to a repo name
+      # that cimas.yml doesn't define).
+      def each_configured_repo
         filtered_repo_names.each do |repo_name|
-
           repo = repo_by_name(repo_name)
-
           if repo.nil?
             puts "[WARNING] #{repo_name} not configured, skipping."
             next
           end
 
-          repo_dir = File.join(repos_path, repo_name)
-          unless File.exist?(repo_dir)
-            puts(
-              "[ERROR] #{repo_name} is missing in #{repos_path}, " \
-              " skipping pull for it."
-            )
+          yield repo
+        end
+      end
 
+      # `each_configured_repo` plus the clone-presence check, for commands
+      # that operate on the working copy. Skip messages are uniform across
+      # subcommands (`skipping <command> for it`).
+      def each_target_repo(command_name)
+        each_configured_repo do |repo|
+          repo_dir = File.join(repos_path, repo.name)
+          unless File.exist?(repo_dir)
+            puts "[ERROR] #{repo.name} is missing in #{repos_path}, skipping #{command_name} for it."
             next
           end
 
+          yield repo, repo_dir
+        end
+      end
+
+      # Remote-mutating subcommands refuse to run unless -g is given and
+      # resolves to at least one repository. Raises OptionParser errors so
+      # the CLI reports a clean message without a backtrace.
+      def require_explicit_scope!(command_name)
+        return unless self.class.remote_mutating?(command_name, config)
+
+        groups = config['groups']
+        if groups.nil?
+          raise OptionParser::MissingArgument,
+                "#{command_name}: no -g given — would target all " \
+                "#{repositories.size} repositories in #{config['config_file_path']}. " \
+                "Pass -g <group(s)> or -g <repo-name> to scope, or -g all to " \
+                "target the whole fleet deliberately."
+        end
+        if groups.empty?
+          raise OptionParser::InvalidArgument,
+                "#{command_name}: -g given but empty (e.g. `-g ''`) — pass " \
+                "-g <group(s)>, -g <repo-name>, or -g all to target the " \
+                "whole fleet deliberately."
+        end
+
+        names = filtered_repo_names
+        if names.empty?
+          raise OptionParser::InvalidArgument,
+                "#{command_name}: -g #{Array(groups).join(',')} resolves to 0 " \
+                "repositories in #{config['config_file_path']} — check the " \
+                "groups: section or the repo name."
+        end
+      end
+
+      # Eager fail-fast for required flags, before any repo iteration —
+      # lazy accessor validation alone let `push -g data` (no -b) exit 0
+      # whenever every repo happened to be skipped.
+      def validate_required_options!(command_name)
+        missing = self.class.missing_required_options(command_name, config)
+        return if missing.empty?
+
+        flags = missing.map { |key| OPTION_FLAGS.fetch(key, key) }.join(', ')
+        raise OptionParser::MissingArgument,
+              "#{command_name}: missing required option(s): #{flags}"
+      end
+
+      def announce_scope(command_name)
+        names = filtered_repo_names
+        label = if names.size <= SCOPE_LIST_LIMIT
+                  names.join(', ')
+                else
+                  "(list omitted, >#{SCOPE_LIST_LIMIT} repos)"
+                end
+        puts "Scope for #{command_name}: #{names.size} repo(s): #{label}"
+      end
+
+      def repo_by_name(name)
+        attributes = repositories[name]
+        return nil unless attributes
+
+        Cimas::Repository.new(name, attributes)
+      end
+
+      def pull
+        sanity_check
+
+        each_target_repo('pull') do |repo, repo_dir|
           g = Git.open(repo_dir)
 
-          dry_run("Pulling from #{repo_name}/#{repo.branch}...") do
-            puts "Pulling from #{repo_name}/#{repo.branch}..."
+          dry_run("Pulling from #{repo.name}/#{repo.branch}...") do
+            puts "Pulling from #{repo.name}/#{repo.branch}..."
             g.remote("origin").fetch
-            g.reset_hard(repo.branch) rescue 'ignore'
+            begin
+              g.reset_hard(repo.branch)
+            rescue Git::Error
+              # reset can fail when the branch ref is absent on a fresh
+              # clone; checkout/pull below still applies.
+              nil
+            end
             g.checkout(repo.branch)
             g.pull("origin", repo.branch)
           end
@@ -313,10 +442,7 @@ module Cimas
       end
 
       def commit_message
-        if config['commit_message'].nil?
-          raise OptionParser::MissingArgument, "Missing -m/--message value"
-        end
-        msg = config['commit_message']
+        msg = required_option('commit_message', '-m/--message')
         unless msg.include? "request-checks:"
           # https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/about-status-checks#checks
           msg << "\n\nrequest-checks: true"
@@ -325,31 +451,19 @@ module Cimas
       end
 
       def pr_message
-        if config['pr_message'].nil?
-          raise OptionParser::MissingArgument, "Missing -m/--message value"
-        end
-        config['pr_message']
+        required_option('pr_message', '-m/--message')
       end
 
       def push_to_branch
-        if config['push_to_branch'].nil?
-          raise OptionParser::MissingArgument, "Missing -b/--push-branch value"
-        end
-        config['push_to_branch']
+        required_option('push_to_branch', '-b/--push-branch')
       end
 
       def merge_branch
-        if config['merge_branch'].nil?
-          raise OptionParser::MissingArgument, "Missing -b/--merge-branch value"
-        end
-        config['merge_branch']
+        required_option('merge_branch', '-b/--merge-branch')
       end
 
       def shell_cmd
-        if config['shell_cmd'].nil?
-          raise OptionParser::MissingArgument, "Missing -c/--shell-cmd value"
-        end
-        config['shell_cmd']
+        required_option('shell_cmd', '-c/--shell-cmd')
       end
 
       def add_auto_merge_label
@@ -366,24 +480,11 @@ module Cimas
 
       def push
         sanity_check
-
         drift_pushes = 0
         skipped_no_op = 0
 
-        filtered_repo_names.each do |repo_name|
-          repo = repo_by_name(repo_name)
-
-          if repo.nil?
-            puts "[WARNING] #{repo_name} not configured, skipping."
-            next
-          end
-
-          repo_dir = File.join(repos_path, repo_name)
-          unless File.exist?(repo_dir)
-            puts "[ERROR] #{repo_name} is missing in #{repos_path}, skipping push for it."
-            next
-          end
-
+        each_target_repo('push') do |repo, repo_dir|
+          repo_name = repo.name
           g = Git.open(repo_dir)
 
           # Skip repos with no drift. The historical "always push even
@@ -431,7 +532,7 @@ module Cimas
               end
             else
               puts "Committing on #{repo_name}."
-              g.commit_all(commit_message)#, amend: true)
+              g.commit_all(commit_message)
             end
 
             # Still push even if there was no commit, as the remote branch
@@ -462,13 +563,11 @@ module Cimas
         puts "Push summary:"
         puts "  Pushed with drift: #{drift_pushes}"
         puts "  Skipped (no drift): #{skipped_no_op}"
-
-        # run_cmd("git -C #{repos_path} multi -c add appveyor.yml")
       end
 
       def wd_has_drift?(repo_dir)
-        result = `git -C #{repo_dir} status --porcelain 2>/dev/null`
-        !result.strip.empty?
+        out, = Open3.capture3('git', '-C', repo_dir, 'status', '--porcelain')
+        !out.strip.empty?
       rescue StandardError
         false
       end
@@ -514,8 +613,16 @@ module Cimas
         end
       end
 
+      # Maps any GitHub remote form (ssh://git@github.com/org/repo,
+      # git@github.com:org/repo.git, https://github.com/org/repo.git) to
+      # the `org/repo` slug Octokit expects.
       def git_remote_to_github_name(remote)
-        remote.match(/github.com\/(.*)/)[1]
+        match = remote.to_s.match(%r{github\.com[/:](.+?)(?:\.git)?\z})
+        unless match
+          raise "[ERROR] not a GitHub remote: #{remote.inspect} — cimas only operates on GitHub repositories."
+        end
+
+        match[1]
       end
 
       # For metanorma/ci#347 Option B: a `files:` value can be either the
@@ -551,7 +658,6 @@ module Cimas
       end
 
       def fetch_repo_visibility(slug)
-        require 'octokit'
         github_client.repo(slug).private
       rescue Octokit::NotFound
         puts "[WARNING] Cannot fetch visibility for #{slug} (404); " \
@@ -595,15 +701,14 @@ module Cimas
                else
                  "As title. \n\n _Generated by Cimas_."
                end
-        # Coerce to an Array of handles. Accepts:
-        #   - Array of strings from cimas.yml settings (the legacy shape)
-        #   - String from the `-a` / `-w` CLI flags (a single handle, OR a
-        #     comma-separated list per the option's help text)
-        # Without coercion, `-a opoudjis` reached this block as a bare String
-        # and `.join(',')` further down crashed with NoMethodError, aborting
-        # `cimas open-prs` before any PR could be created.
-        assignees = Array(config['assignees']).flat_map { |x| x.is_a?(String) ? x.split(',') : x }
-        reviewers = Array(config['reviewers']).flat_map { |x| x.is_a?(String) ? x.split(',') : x }
+        # Coerce to an Array of handles via string_list: accepts an Array
+        # from cimas.yml settings or a (possibly comma-separated) String
+        # from the `-a` / `-w` CLI flags. Without coercion, `-a opoudjis`
+        # reached this block as a bare String and `.join(',')` further
+        # down crashed with NoMethodError, aborting `cimas open-prs`
+        # before any PR could be created.
+        assignees = string_list(config['assignees'])
+        reviewers = string_list(config['reviewers'])
 
         # GitHub rejects self-review requests with HTTP 422
         # "Review cannot be requested from pull request author."
@@ -629,19 +734,8 @@ module Cimas
 
         cooldown_counter = 0
 
-        filtered_repo_names.each do |repo_name|
-          repo = repo_by_name(repo_name)
-          if repo.nil?
-            puts "[WARNING] #{repo_name} not configured, skipping."
-            next
-          end
-
-          repo_dir = File.join(repos_path, repo_name)
-          unless File.exist?(repo_dir)
-            puts "[ERROR] #{repo_name} is missing in #{repos_path}, skipping sync_and_commit for it."
-            next
-          end
-
+        each_target_repo('open-prs') do |repo, repo_dir|
+          repo_name = repo.name
           g = Git.open(repo_dir)
           github_slug = git_remote_to_github_name(repo.remote)
 
@@ -705,10 +799,6 @@ module Cimas
               puts "PR #{github_slug}\##{number} created"
 
             rescue Octokit::Error => e
-              # puts e.inspect
-              # puts '------'
-              # puts "e.message #{e.message}"
-
               case e.message
               when /A pull request already exists/
                 puts "[WARNING] PR already exists for #{branch}."
@@ -731,21 +821,17 @@ module Cimas
               end
             end
 
-            # puts pr.inspect
-
             unless pr
               puts "[WARNING] Detecting PR from GitHub..."
-              github_branch_owner = github_slug.match(/(.*)\/.*/)[1]
+              github_branch_owner = github_slug.split('/').first
               prs = github_client.pull_requests(github_slug, head: "#{github_branch_owner}:#{branch}")
               pr = prs.first
               unless pr
                 puts "[WARNING] Failed to detect PR from GitHub for #{github_slug} repo. Skipping."
-                next 
+                next
               end
               puts "[WARNING] Detected PR to be #{github_slug}\##{pr['number']}, continue processing."
             end
-
-            # TODO: Catch
 
             number = pr['number']
 
@@ -759,10 +845,6 @@ module Cimas
                 )
 
               rescue Octokit::Error => e
-                # puts e.inspect
-                # puts '------'
-                # puts "e.message #{e.message}"
-
                 # TODO: When command is first run, should exclude the PR author from 'reviewers'
                 case e.message
                 when /Review cannot be requested from pull request author./
@@ -805,13 +887,7 @@ module Cimas
         sanity_check
         branch = push_to_branch
 
-        filtered_repo_names.each do |repo_name|
-          repo = repo_by_name(repo_name)
-          if repo.nil?
-            puts "[WARNING] #{repo_name} not configured, skipping."
-            next
-          end
-
+        each_configured_repo do |repo|
           github_slug = git_remote_to_github_name(repo.remote)
           owner = github_slug.split('/').first
 
@@ -830,30 +906,12 @@ module Cimas
 
           if pr.nil?
             # No PR for this branch — attempt to delete if the branch exists
-            dry_run("Delete branch #{github_slug}:#{branch} (no PR found)") do
-              begin
-                github_client.delete_branch(github_slug, branch)
-                puts "[deleted-no-pr] #{github_slug}:#{branch}"
-              rescue Octokit::UnprocessableEntity, Octokit::NotFound
-                puts "[absent] #{github_slug}:#{branch} (already deleted)"
-              rescue Octokit::Error => e
-                puts "[ERROR] #{github_slug}:#{branch} delete failed (#{e.class}): #{e.message}"
-              end
-            end
+            delete_remote_branch(github_slug, branch, "no PR found")
             next
           end
 
           if pr.merged_at
-            dry_run("Delete branch #{github_slug}:#{branch} (PR ##{pr.number} merged)") do
-              begin
-                github_client.delete_branch(github_slug, branch)
-                puts "[deleted-merged] #{github_slug}:#{branch} (PR ##{pr.number})"
-              rescue Octokit::UnprocessableEntity, Octokit::NotFound
-                puts "[absent] #{github_slug}:#{branch} (PR ##{pr.number} merged but branch already gone)"
-              rescue Octokit::Error => e
-                puts "[ERROR] #{github_slug}:#{branch} delete failed (#{e.class}): #{e.message}"
-              end
-            end
+            delete_remote_branch(github_slug, branch, "PR ##{pr.number} merged")
           elsif pr.state == 'open'
             puts "[skip-open] #{github_slug}:#{branch} (PR ##{pr.number} still open)"
           else
@@ -885,13 +943,7 @@ module Cimas
         sanity_check
         prefix = config['cleanup_branch_prefix'] || 'cimas-sync-'
 
-        filtered_repo_names.each do |repo_name|
-          repo = repo_by_name(repo_name)
-          if repo.nil?
-            puts "[WARNING] #{repo_name} not configured, skipping."
-            next
-          end
-
+        each_configured_repo do |repo|
           github_slug = git_remote_to_github_name(repo.remote)
 
           # Page all closed PRs; API caps at 100/page but that's fine for
@@ -917,17 +969,10 @@ module Cimas
           end
 
           candidates.each do |pr|
-            branch = pr.head.ref
-            dry_run("Delete branch #{github_slug}:#{branch} (PR ##{pr.number} closed-not-merged #{pr.closed_at})") do
-              begin
-                github_client.delete_branch(github_slug, branch)
-                puts "[deleted] #{github_slug}:#{branch} (PR ##{pr.number})"
-              rescue Octokit::UnprocessableEntity, Octokit::NotFound
-                puts "[absent] #{github_slug}:#{branch} (branch already gone)"
-              rescue Octokit::Error => e
-                puts "[ERROR] #{github_slug}:#{branch} delete failed (#{e.class}): #{e.message}"
-              end
-            end
+            delete_remote_branch(
+              github_slug, pr.head.ref,
+              "PR ##{pr.number} closed-not-merged #{pr.closed_at}"
+            )
           end
         end
       end
@@ -963,25 +1008,11 @@ module Cimas
         # paths so a wave can be scoped to just one class of orphan (e.g.
         # `.github/workflows/generate.yml` for the ci#347 cleanup). nil means
         # no filter — surface all orphan cimas-managed files.
-        only_targets = if config['cleanup_only_targets']
-                         Array(config['cleanup_only_targets']).flat_map do |t|
-                           t.is_a?(String) ? t.split(',') : t
-                         end.to_set
-                       end
+        only_targets = config['cleanup_only_targets'] &&
+                       string_list(config['cleanup_only_targets']).to_set
 
-        filtered_repo_names.each do |repo_name|
-          repo = repo_by_name(repo_name)
-          if repo.nil?
-            puts "[WARNING] #{repo_name} not configured, skipping."
-            next
-          end
-
-          repo_dir = File.join(repos_path, repo_name)
-          unless File.exist?(repo_dir)
-            puts "[ERROR] #{repo_name} is missing in #{repos_path}, skipping."
-            next
-          end
-
+        each_target_repo('cleanup-orphan-files') do |repo, repo_dir|
+          repo_name = repo.name
           g = Git.open(repo_dir)
           unless keep_changes
             g.checkout(repo.branch)
@@ -990,7 +1021,7 @@ module Cimas
           end
 
           mapped_targets = (repo.files || {}).keys.to_set
-          orphans = find_orphan_cimas_files(repo_dir, mapped_targets, only_targets)
+          orphans = Cimas::OrphanFiles.find(repo_dir, mapped_targets, only_targets)
 
           if orphans.empty?
             puts "[clean] #{repo_name}"
@@ -1024,53 +1055,6 @@ module Cimas
         end
       end
 
-      # Returns paths (repo-relative) of files under `repo_dir` that:
-      #   - are regular files
-      #   - are not inside `.git/`
-      #   - carry the Cimas auto-generated header in the first ~500 bytes
-      #   - do NOT appear in `mapped_targets` (repo's current cimas.yml
-      #     `files:` mapping)
-      #
-      # The 500-byte read window is enough to cover the two-line header
-      # `copy_file` writes ("# Auto-generated by Cimas: Do not edit it
-      # manually!\n# See https://github.com/metanorma/cimas") plus any
-      # leading shebang or comment. Files smaller than 500 bytes read
-      # to EOF without error.
-      def find_orphan_cimas_files(repo_dir, mapped_targets, only_targets = nil)
-        orphans = []
-        # Force UTF-8 read so non-ASCII bytes don't blow up the header check.
-        Dir.glob(File.join(repo_dir, '**', '*'), File::FNM_DOTMATCH).each do |path|
-          next unless File.file?(path)
-          next if path.include?('/.git/') || path.end_with?('/.git')
-
-          begin
-            first_bytes = File.read(path, 500, encoding: 'UTF-8')
-          rescue ArgumentError, EncodingError
-            # Binary or malformed encoding — skip (cimas only writes text).
-            next
-          rescue SystemCallError
-            next
-          end
-          # Empty files / symlinks to nothing / short files may yield nil
-          # or "". Both mean "no cimas header," so skip either way.
-          next if first_bytes.nil? || first_bytes.empty?
-          next unless first_bytes.include?('Auto-generated by Cimas')
-
-          rel_path = path.sub("#{repo_dir}/", '')
-          # `--only-target=<path>` (list of exact target paths) narrows the
-          # sweep to specific file(s), so a wave can be scoped to just one
-          # class of orphan (e.g. `.github/workflows/generate.yml` for the
-          # ci#347 cleanup) without also pulling in unrelated historical
-          # drift the operator hasn't authorised.
-          if only_targets && !only_targets.include?(rel_path)
-            next
-          end
-
-          orphans << rel_path unless mapped_targets.include?(rel_path)
-        end
-        orphans
-      end
-
       # Local maintainer-side preflight that mirrors the GHA preflight job in
       # `metanorma/ci/.github/workflows/rubygems-release.yml`. Runs against a
       # single repo's workspace clone before the maintainer fires the
@@ -1086,9 +1070,6 @@ module Cimas
       # maintainer who runs it before firing.
       def release_preflight
         repo_name = config['target_repo']
-        if repo_name.nil? || repo_name.empty?
-          raise OptionParser::MissingArgument, "Missing --repo <name>"
-        end
 
         repo = repo_by_name(repo_name)
         if repo.nil?
@@ -1146,9 +1127,10 @@ module Cimas
           puts ""
 
           puts "[4/4] Version awareness..."
-          if gemspec_file
-            gem_name = `ruby -e "puts Gem::Specification.load('#{gemspec_file}').name"`.strip
-            gem_version = `ruby -e "puts Gem::Specification.load('#{gemspec_file}').version.to_s"`.strip
+          gem_spec = gemspec_file ? Gem::Specification.load(gemspec_file) : nil
+          if gem_spec
+            gem_name = gem_spec.name
+            gem_version = gem_spec.version.to_s
             remote_list = `gem list --remote --exact --version "#{gem_version}" "#{gem_name}" 2>/dev/null`
             if remote_list.include?("#{gem_name} (#{gem_version})")
               puts "    ℹ️  #{gem_name} #{gem_version} is already on rubygems.org"
@@ -1183,42 +1165,94 @@ module Cimas
       def for_each
         sanity_check
         cmd = shell_cmd
+        failures = []
 
-        filtered_repo_names.each do |repo_name|
-          repo = repo_by_name(repo_name)
-          if repo.nil?
-            puts "[WARNING] #{repo_name} not configured, skipping."
-            next
-          end
-
-          repo_dir = File.join(repos_path, repo_name)
-          unless File.exist?(repo_dir)
-            puts "[ERROR] #{repo_name} is missing in #{repos_path}, skipping sync for it."
-            next
-          end
-
+        each_target_repo('for-each') do |repo, repo_dir|
           Dir.chdir(repo_dir) do
-            puts "Execute '#{cmd}' for #{repo_name} repository..."
+            puts "Execute '#{cmd}' for #{repo.name} repository..."
             system(cmd)
+            unless $?.success?
+              failures << repo.name
+              puts "[ERROR] '#{cmd}' failed in #{repo.name} (exit #{$?.exitstatus})"
+            end
           end
         end
+
+        return if failures.empty?
+
+        raise "[ERROR] for-each command failed in #{failures.size} repo(s): #{failures.join(', ')}"
       end
 
       private
 
+      def required_option(key, flag)
+        value = config[key]
+        raise OptionParser::MissingArgument, "Missing #{flag} value" if value.nil?
+
+        value
+      end
+
+      # Coerces a CLI/cimas.yml value that may be a (comma-separated)
+      # String, a bare value, or an Array into a flat list of strings.
+      def string_list(value)
+        Array(value).flat_map { |item| item.is_a?(String) ? item.split(',') : item }
+      end
+
+      # Deletes a remote branch, reporting the outcome with a uniform
+      # [deleted]/[absent]/[ERROR] prefix; `reason` carries the
+      # justification into the log lines.
+      def delete_remote_branch(github_slug, branch, reason)
+        dry_run("Delete branch #{github_slug}:#{branch} (#{reason})") do
+          github_client.delete_branch(github_slug, branch)
+          puts "[deleted] #{github_slug}:#{branch} (#{reason})"
+        end
+      rescue Octokit::UnprocessableEntity, Octokit::NotFound
+        puts "[absent] #{github_slug}:#{branch} (#{reason}; branch already gone)"
+      rescue Octokit::Error => e
+        puts "[ERROR] #{github_slug}:#{branch} delete failed (#{e.class}): #{e.message}"
+      end
+
+      # Renders an ERB template from the config master against a repo's
+      # binding context: legacy `template: binding:` values become
+      # OpenStruct dot-notation methods (e.g. `<%= flavor %>`); the
+      # `with:` block (metanorma/ci#300 Gap 1) is exposed as
+      # `with_values` — a Hash — so templates can access keys that
+      # aren't valid Ruby identifiers (e.g. `private-fonts`) via
+      # `<%= with_values['private-fonts'] %>`. trim_mode '-' lets
+      # templates trim conditional blocks without stray blank lines.
+      def render_erb_template(source_path, repo)
+        template = ERB.new(File.read(source_path), trim_mode: "-")
+        params = OpenStruct.new(
+          repo.binding.merge("with_values" => repo.with_values)
+        ).instance_eval { binding }
+        template.result(params)
+      end
+
       def copy_file(from, to)
-        dry_run("copying file #{from} -> #{to}") do
-          to_dir = File.dirname(to)
-          unless File.directory?(to_dir)
-            FileUtils.mkdir_p(to_dir)
+        write_managed(to, "copying file #{from} -> #{to}") do |out|
+          File.foreach(from) do |line|
+            out.puts line
           end
+        end
+      end
+
+      def write_rendered(content, to)
+        write_managed(to, "writing rendered template -> #{to}") do |out|
+          out.puts content
+        end
+      end
+
+      # One writer for every cimas-managed file: creates the target
+      # directory, prefixes the generated header, then yields the file
+      # handle for the body (copied lines or rendered template).
+      def write_managed(to, description)
+        dry_run(description) do
+          to_dir = File.dirname(to)
+          FileUtils.mkdir_p(to_dir) unless File.directory?(to_dir)
 
           File.open(to, 'w+') do |fo|
-            fo.puts '# Auto-generated by Cimas: Do not edit it manually!'
-            fo.puts '# See https://github.com/metanorma/cimas'
-            File.foreach(from) do |li|
-              fo.puts li
-            end
+            fo.puts Cimas::GENERATED_HEADER
+            yield fo
           end
         end
       end
@@ -1232,11 +1266,10 @@ module Cimas
       end
 
       def groups
-        data['groups']
+        data['groups'] || {}
       end
 
       def group_repo_names(group)
-        # puts "group #{group}"
         case group
         when 'all'
           repositories.keys
@@ -1247,9 +1280,6 @@ module Cimas
             [group] # if group is the repo by itself
           end
         end
-      end
-
-      def repo_sync(repo)
       end
     end
   end

@@ -17,14 +17,9 @@ RSpec.describe Cimas::Repository do
     end
 
     context "with invalid repository hash" do
-      it "does not set any attributes and returns to to nil?" do
-        name = "invalid-repo-name"
-        data = sample_data["repositories"][name]
-
-        repository = Cimas::Repository.new(name, data)
-
-        expect(repository).to be_nil
-        expect(repository.nil?).to be_truthy
+      it "raises when constructed with nil attributes instead of yielding a sentinel" do
+        expect { Cimas::Repository.new("invalid-repo-name", nil) }
+          .to raise_error(NoMethodError)
       end
     end
 

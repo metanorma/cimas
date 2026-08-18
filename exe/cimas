@@ -3,7 +3,7 @@
 require 'pathname'
 require 'optparse'
 
-require_relative '../lib/cimas/cli/command'
+require_relative '../lib/cimas'
 
 options = {
   'repos_path' => Pathname.getwd + 'repos',
@@ -204,10 +204,14 @@ subcommands = {
     end
   end,
   'for-each' => OptionParser.new do |opts|
-    opts.banner = "Usage: cimas sync [options]"
+    opts.banner = "Usage: cimas for-each [options]"
 
     opts.on("-r REPOS_PATH", "--repo-path=REPOS_PATH", "Repo root dir path") do |path|
       options['repos_path'] = Pathname.getwd + path
+    end
+
+    opts.on("-f CONFIG_FILE_PATH", "--config-path=CONFIG_FILE_PATH", "Config file path") do |path|
+      options['config_file_path'] = validate_config_path(Pathname.getwd + path)
     end
 
     opts.on("-g GROUP1,GROUP2,GROUPX", Array, "Groups to update") do |groups|
@@ -304,19 +308,28 @@ subcommands = {
   end,
 }
 
-global.order!
-command = ARGV.shift
-
-if command.nil?
-  command = 'sync'
-end
-
-subcommands[command].order!
-
 begin
+  global.order!
+  command = ARGV.shift
+
+  if command.nil?
+    command = 'sync'
+  end
+
+  unless subcommands.key?(command)
+    raise OptionParser::InvalidOption, "unknown subcommand: #{command} (see 'cimas --help')"
+  end
+
+  subcommands[command].order!
+
   dispatch = Cimas::Cli::Command.new(options)
-  dispatch.send(command.gsub('-', '_'))
+  dispatch.execute(command)
   exit 0
+rescue OptionParser::ParseError => e
+  # Expected user errors (missing/invalid options, scope guard): a clean
+  # message, no backtrace.
+  puts "Error: #{e.message}"
+  exit 1
 rescue => e
   puts "Error: #{e.message}"
   puts e.backtrace
