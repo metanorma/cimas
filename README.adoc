@@ -129,6 +129,8 @@ Cimas works through the `cimas` executable. `cimas` provides the following sub-c
 * `cleanup-orphan-files`
 * `release-preflight`
 
+Run `cimas help` to list every sub-command and `cimas help <command>`
+for a command's flags. Running `cimas` with no sub-command prints help.
 
 ==== Global options
 
@@ -398,10 +400,16 @@ The strict-superset diff gate mentioned above for `--supersede-stale`'s follow-u
 
 ==== `cimas for-each`
 
-The `for-each` sub-command allow to execute arbitrary shell command for each repo
+The `for-each` sub-command executes an arbitrary shell command in each
+repo's working copy.
 
-There is no strict requirment to use this commant during CI configuration update.
-You can use it on demand, for example if some CI configuration files was removed
+Each repo's command exit status is reported per-repo (`[ERROR] '<cmd>'
+failed in <repo> (exit N)`); if any command failed, `for-each` lists
+the failing repos at the end and exits non-zero, so CI can detect it.
+
+There is no strict requirement to use this command during CI
+configuration update. You can use it on demand, for example if some
+CI configuration files were removed
 
 [source,sh]
 ----
@@ -486,15 +494,15 @@ cd ../cimas-wd-2026-07-22 && for d in */; do
 done | tee /tmp/drifted-repos.txt | wc -l
 ----
 
-Useful because `cimas push` (and `cimas --dry-run push`) will report
-work against *every* mapped repo regardless of drift (see gotcha
-below); this one-liner isolates the actually-drifted subset.
+Useful as a pre-push census: `cimas push` skips no-drift repos with a
+"Skipping no-op push" line, so this one-liner gives you the drifted
+subset up front, before any branch is provisioned.
 
 [NOTE]
 ====
-The `-b` and `-m` push options are shown in the `cimas push` reference
-above; they are required (`-b`) / recommended (`-m`) for real pushes,
-but not required for a `cimas diff` preview.
+The `-b` and `-m` push options are both required and validated up
+front — `cimas push` exits 1 before touching any repo if either is
+missing. A `cimas diff` preview needs neither.
 ====
 
 *Step 5 — real push (only after diff review).*
@@ -513,29 +521,19 @@ NOT open PRs — that's `cimas open-prs` as a separate step.
 
 [IMPORTANT]
 ====
-`cimas push` provisions the wave branch on **every mapped repo**, not
-only on drifted ones (see command.rb:405-410 for the rationale — the
-next-stage `cimas open-prs` needs the branch to exist on every repo it
-might open a PR against). This means:
+`cimas push` **skips repos with no drift**: each is logged as
+`Skipping no-op push to <repo> (no drift)` and no branch is
+provisioned for it. The push summary separates `Pushed with drift`
+from `Skipped (no drift)`, so watchers only get notified for repos
+that actually changed.
 
-* The count of "`pushed branches`" is much larger than the count of
-  actually-changed repos. A wave with ~95 drifted repos may push
-  ~150+ branches, most of them no-ops.
-* Every branch push notifies watchers on that repo, including no-op
-  branches. Ronald and other maintainers of many repos will receive
-  one notification per repo, not one per real change. This is a design
-  cost worth budgeting for.
-* `cimas --dry-run push` inherits the same shape — it lists every
-  would-be-pushed branch, including the no-ops. **Do not use `--dry-run
-  push` as your primary preview of "`what actually changes`"; use
-  `cimas diff` for that.**
+The next-stage `cimas open-prs` tolerates these skips: a repo whose
+wave branch is absent on the remote is skipped with a WARNING, and an
+empty PR (`No commits between`) is skipped too.
 
-Mitigations for future waves:
-
-* Split by `-g GROUP` to spread the notification burst across
-  multiple sub-waves and days.
-* File a feature request for a `--skip-no-drift` option on `push` if
-  the notification cost becomes prohibitive.
+`cimas push --dry-run` prints the actions it would take without
+executing them; `cimas diff` remains the primary preview of what
+actually changes.
 ====
 
 *Step 6 — open PRs (optional; only for the drift-having branches).*
@@ -543,15 +541,27 @@ Mitigations for future waves:
 See the `cimas open-prs` section above for the full flag list.
 
 .Required-flag matrix per sub-command
-[cols="1,1,1,1,1,1", options="header"]
+[cols="1,3", options="header"]
 |===
-| Sub-command | `-r` | `-f` | `-d` | `-b` | `-m`
-| `setup`     | ✅   | ✅   |      |      |
-| `sync`      | ✅   | ✅   | ✅   |      |
-| `diff`      | ✅   | ✅   | ✅   |      |
-| `push`      | ✅   | ✅   |      | ✅   | (recommended)
-| `open-prs`  | ✅   | ✅   |      | ✅   | (recommended)
+| Sub-command | Required flags
+
+| `setup`     | `-r` `-f`
+| `sync`      | `-r` `-f` `-d`
+| `diff`      | `-r` `-f`
+| `pull`      | `-r` `-f`
+| `push`      | `-r` `-f` `-b` `-m` `-g`
+| `open-prs`  | `-r` `-f` `-b` (merge branch) `-m` (PR title) `-g`
+| `for-each`  | `-r` `-f` `-c` `-g`
+| `cleanup-merged-prs`   | `-r` `-f` `-b` `-g`
+| `cleanup-closed-prs`   | `-r` `-f` `-g`
+| `cleanup-orphan-files` | `-r` `-f` `-g` (plus `-b` `-m` under `--push-after`)
+| `release-preflight`    | `-r` `-f` `--repo`
 |===
+
+Missing required flags fail fast with
+`Error: <command>: missing required option(s): ...` and exit 1 before
+any repo is touched. `-g` is required by the scope guard on every
+remote-mutating sub-command (see the warning above).
 
 .Gotchas summary
 [cols="1,3", options="header"]
@@ -560,7 +570,8 @@ See the `cimas open-prs` section above for the full flag list.
 | Missing `-d` on `sync` | `[ERROR] config_master_path not set, aborting.`
 | Missing `-b` on `push`/`open-prs` | `Error: Missing -b/--push-branch value`
 | Missing `GITHUB_TOKEN` | `[WARNING] Visibility fetch failed ...; defaulting to \`private\` (safer).` — sync is inaccurate for public repos.
-| `--dry-run push` count includes no-op branches | Push count much larger than actual drift; use `cimas diff` to preview real changes.
+| Global flag placed *before* the sub-command | Usage help is printed instead of running — global flags go after the sub-command (`cimas push --dry-run ...`).
+| Config without a `repositories:` section | Error at startup: `no `repositories:` section in ... — nothing to operate on`.
 |===
 
 
@@ -868,6 +879,31 @@ place rather than replacing them.
 == Development
 
 After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+
+The test suite is fully offline: git-touching specs run against real
+repositories created in temp directories, with a local bare repository
+as the push remote — no network and no GitHub access are needed. This
+includes an end-to-end lifecycle spec (`sync` → `diff` → `push`).
+
+=== Architecture overview (for contributors)
+
+* `exe/cimas` boots `Cimas::Cli::Runner` (Thor): the CLI surface —
+  option parsing, help (`cimas help [COMMAND]`), and one-line
+  delegation per sub-command.
+* `Cimas::Cli::Command` is the orchestrator. One `COMMANDS` registry
+  entry per subcommand drives dispatch behavior: the remote-mutating
+  classification (scope guard + blast-radius announcement) and the
+  required options (fail-fast validation).
+* Domain models are value objects over the cimas.yml sections:
+  `Cimas::Repository` (`repositories:`), `Cimas::Patch` (`patches:`).
+* Seams: `Cimas::WorkingCopy` is the git seam (all git-gem knowledge
+  lives there — subcommands never call the git gem directly);
+  `Cimas::GitHub` is the Octokit boundary (client, remote→slug
+  mapping, visibility fallback); `Cimas::OrphanFiles` is the pure
+  orphan-detection logic; `Cimas::ReleasePreflight` is the extracted
+  release check-runner.
+* `Cimas::GENERATED_HEADER` is the single definition of the
+  generated-file header shared by the writer and orphan detection.
 
 
 == Contributing
