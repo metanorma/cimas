@@ -1,5 +1,6 @@
 require "spec_helper"
 require "open3"
+require "tmpdir"
 require "rbconfig"
 require "fileutils"
 
@@ -10,8 +11,12 @@ require "fileutils"
 RSpec.describe "exe/cimas" do
   let(:exe) { Cimas.root_path.join("exe/cimas").to_s }
 
+  # Boot without bundler (clear RUBYOPT): the installed-gem execution
+  # model. A require that only works under bundler is invisible here.
+  CLEAN_ENV = { "RUBYOPT" => nil }.freeze
+
   def run_exe(*args)
-    out, err, status = Open3.capture3(RbConfig.ruby, exe, *args)
+    out, err, status = Open3.capture3(CLEAN_ENV, RbConfig.ruby, exe, *args)
     [out + err, status]
   end
 
@@ -25,7 +30,7 @@ RSpec.describe "exe/cimas" do
 
   it "boots from a directory outside the repo (require_relative load)" do
     out, err, = Dir.mktmpdir("cimas-exe-spec") do |dir|
-      Open3.capture3(RbConfig.ruby, exe, "diff", "-f", File.join(dir, "cimas.yml"), chdir: dir)
+      Open3.capture3(CLEAN_ENV, RbConfig.ruby, exe, "diff", "-f", File.join(dir, "cimas.yml"), chdir: dir)
     end
 
     expect(out + err).to include("does not exist")
@@ -42,7 +47,7 @@ RSpec.describe "exe/cimas" do
   it "guards a remote-mutating command without -g at the CLI level" do
     out, err, status = Dir.mktmpdir("cimas-exe-guard") do |dir|
       FileUtils.cp(Cimas.root_path.join("spec/fixtures/sample.yml"), File.join(dir, "cimas.yml"))
-      Open3.capture3(RbConfig.ruby, exe, "push", "--dry-run", "-f", "cimas.yml", chdir: dir)
+      Open3.capture3(CLEAN_ENV, RbConfig.ruby, exe, "push", "--dry-run", "-f", "cimas.yml", chdir: dir)
     end
 
     expect(status.exitstatus).to eq(1)
@@ -52,7 +57,7 @@ RSpec.describe "exe/cimas" do
   it "accepts --dry-run after the sub-command name too" do
     out, err, status = Dir.mktmpdir("cimas-exe-dry") do |dir|
       FileUtils.cp(Cimas.root_path.join("spec/fixtures/sample.yml"), File.join(dir, "cimas.yml"))
-      Open3.capture3(RbConfig.ruby, exe, "push", "--dry-run", "-f", "cimas.yml",
+      Open3.capture3(CLEAN_ENV, RbConfig.ruby, exe, "push", "--dry-run", "-f", "cimas.yml",
                      "-g", "metanorma", "-b", "b", "-m", "m", chdir: dir)
     end
 

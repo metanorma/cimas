@@ -31,6 +31,7 @@ RSpec.describe Cimas::Cli::Command do
     let(:repo_dir) { File.join(tmp_root, repo_name) }
     let(:gemspec_path) { File.join(repo_dir, "foo.gemspec") }
     let(:git_repo) { Git.init(repo_dir) }
+    let(:working_copy) { Cimas::WorkingCopy.new(git_repo) }
 
     before do
       FileUtils.mkdir_p(repo_dir)
@@ -76,7 +77,7 @@ RSpec.describe Cimas::Cli::Command do
         },
       )
 
-      command.apply_patches(repo_name, repo_dir, git_repo)
+      command.apply_patches(repo_name, repo_dir, working_copy)
       content = File.read(gemspec_path)
 
       expect(content).to include('>= 3.1.0')
@@ -94,7 +95,7 @@ RSpec.describe Cimas::Cli::Command do
         },
       )
 
-      command.apply_patches(repo_name, repo_dir, git_repo)
+      command.apply_patches(repo_name, repo_dir, working_copy)
 
       # ls-files = the index itself (status.* compares against HEAD, which a
       # freshly-init'd repo does not have).
@@ -111,7 +112,7 @@ RSpec.describe Cimas::Cli::Command do
         },
       )
 
-      expect { command.apply_patches(repo_name, repo_dir, git_repo) }
+      expect { command.apply_patches(repo_name, repo_dir, working_copy) }
         .to output(/pattern not present in file/).to_stdout
 
       expect(File.read(gemspec_path)).to include('>= 2.7.0')
@@ -127,7 +128,7 @@ RSpec.describe Cimas::Cli::Command do
         },
       )
 
-      expect { command.apply_patches(repo_name, repo_dir, git_repo) }
+      expect { command.apply_patches(repo_name, repo_dir, working_copy) }
         .to output(/no files matched glob/).to_stdout
     end
 
@@ -141,7 +142,7 @@ RSpec.describe Cimas::Cli::Command do
         },
       )
 
-      command.apply_patches(repo_name, repo_dir, git_repo)
+      command.apply_patches(repo_name, repo_dir, working_copy)
       expect(File.read(gemspec_path)).to include('>= 2.7.0')
     end
 
@@ -172,14 +173,14 @@ RSpec.describe Cimas::Cli::Command do
         "dry_run" => true,
       )
 
-      command.apply_patches(repo_name, repo_dir, git_repo)
+      command.apply_patches(repo_name, repo_dir, working_copy)
       expect(File.read(gemspec_path)).to include('>= 2.7.0')
       expect(git_repo.ls_files).to be_empty
     end
 
     it "is a no-op when the config has no patches: block" do
       command = build_command(nil)
-      expect { command.apply_patches(repo_name, repo_dir, git_repo) }
+      expect { command.apply_patches(repo_name, repo_dir, working_copy) }
         .not_to raise_error
       expect(File.read(gemspec_path)).to include('>= 2.7.0')
     end
@@ -473,6 +474,14 @@ RSpec.describe Cimas::Cli::Command do
   end
 
   describe ".remote_mutating? and COMMANDS registry" do
+    it "gives every required option key a CLI flag spelling" do
+      required_keys = Cimas::Cli::Command::COMMANDS.values.flat_map do |meta|
+        (meta[:requires] || []) + ((meta[:requires_if] || [nil, []])[1])
+      end.uniq
+
+      expect(required_keys - Cimas::Cli::Command::OPTION_FLAGS.keys).to be_empty
+    end
+
     it "classifies remote-mutating commands" do
       expect(Cimas::Cli::Command.remote_mutating?("push", {})).to be(true)
       expect(Cimas::Cli::Command.remote_mutating?("for-each", {})).to be(true)
@@ -689,31 +698,6 @@ RSpec.describe Cimas::Cli::Command do
         "# See https://github.com/metanorma/cimas\n" \
         "rendered\n"
       )
-    end
-  end
-
-  describe "wd_has_drift?" do
-    let(:tmp_root) { Dir.mktmpdir("cimas-drift-spec") }
-    let(:repo_dir) { File.join(tmp_root, "repo") }
-
-    before { FileUtils.mkdir_p(repo_dir); Git.init(repo_dir) }
-    after { FileUtils.rm_rf(tmp_root) }
-
-    let(:command) { Cimas::Cli::Command.new(options("msg")) }
-
-    it "is false on a clean working copy and true once a file changes" do
-      expect(command.wd_has_drift?(repo_dir)).to be(false)
-
-      File.write(File.join(repo_dir, "Gemfile"), "source 'https://rubygems.org'")
-
-      expect(command.wd_has_drift?(repo_dir)).to be(true)
-    end
-
-    it "is false for a directory that is not a git repo" do
-      plain_dir = File.join(tmp_root, "plain")
-      FileUtils.mkdir_p(plain_dir)
-
-      expect(command.wd_has_drift?(plain_dir)).to be(false)
     end
   end
 

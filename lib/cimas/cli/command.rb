@@ -1,19 +1,13 @@
 require 'yaml'
-require 'git'
 require 'octokit'
 require 'ostruct'
 require 'erb'
 require 'fileutils'
 require 'set'
-require 'open3'
 
 module Cimas
   module Cli
     class Command
-      # Writers only: the readers are explicit methods below (an
-      # attr_accessor reader here would be silently shadowed by them).
-      attr_writer :github_client, :config
-
       DEFAULT_CONFIG = {
         'dry_run' => false,
         'verbose' => false,
@@ -148,11 +142,34 @@ module Cimas
         data['settings']
       end
 
+      # Octokit boundary lives in Cimas::GitHub; these delegators keep
+      # the orchestrator's vocabulary (slug from remote, cached
+      # visibility per repository).
+      def github
+        @github ||= Cimas::GitHub.new(token: config['github_token'])
+      end
+
       def github_client
-        if config['github_token'].nil?
-          raise "[ERROR] Please set GITHUB_TOKEN environment variable to use GitHub functions."
-        end
-        @github_client ||= Octokit::Client.new(access_token: config['github_token'])
+        github.client
+      end
+
+      def git_remote_to_github_name(remote)
+        github.slug_for(remote)
+      end
+
+      def fetch_repo_visibility(slug)
+        github.fetch_visibility(slug)
+      end
+
+      # Returns true if the repo is GitHub-private, false if public.
+      # Cached per invocation so a wave sync makes at most one call per
+      # repo.
+      def repo_visibility_private?(repo)
+        @visibility_cache ||= {}
+        slug = git_remote_to_github_name(repo.remote)
+        return @visibility_cache[slug] if @visibility_cache.key?(slug)
+
+        @visibility_cache[slug] = fetch_repo_visibility(slug)
       end
 
       def config
@@ -168,7 +185,7 @@ module Cimas
           repo_dir = File.join(repos_path, repo_name)
           unless File.exist?(repo_dir) && File.exist?(File.join(repo_dir, '.git'))
             puts "Git cloning #{repo_name} from #{attribs['remote']}..."
-            Git.clone(attribs['remote'], repo_name, path: repos_path)
+            WorkingCopy.clone(attribs['remote'], repo_name, path: repos_path)
           else
             puts "Skip cloning #{repo_name}, #{repo_dir} already exists." if verbose
           end
@@ -220,13 +237,9 @@ module Cimas
           repo_name = repo.name
 
           dry_run("Copying files to #{repo_name} and staging them") do
-            g = Git.open(repo_dir)
+            wc = WorkingCopy.open(repo_dir)
 
-            unless keep_changes
-              g.checkout(repo.branch)
-              g.reset_hard(repo.branch)
-              g.clean(force: true)
-            end
+            wc.reset_clean(repo.branch) unless keep_changes
 
             puts "Syncing and staging files in #{repo_name}..."
 
@@ -242,15 +255,15 @@ module Cimas
                 copy_file(source_path, target_path)
               end
 
-              g.add(target)
+              wc.stage(target)
             end
 
-            apply_patches(repo_name, repo_dir, g)
+            apply_patches(repo_name, repo_dir, wc)
 
             if verbose
-              g.status.changed.each do |file, status|
+              wc.each_staged_change do |_file, contents|
                 puts "Updated files in #{repo_name}:"
-                puts status.blob(:index).contents
+                puts contents
               end
             end
           end
@@ -261,7 +274,7 @@ module Cimas
         (data['patches'] || {}).map { |name, attrs| Cimas::Patch.new(name, attrs) }
       end
 
-      def apply_patches(repo_name, repo_dir, git)
+      def apply_patches(repo_name, repo_dir, working_copy)
         patches.each do |patch|
           target_repo_names = patch.group_names.flat_map { |g| group_repo_names(g) }.uniq
           next unless target_repo_names.include?(repo_name)
@@ -299,7 +312,7 @@ module Cimas
 
               dry_run("Patching #{rel_path} in #{repo_name} (patch '#{patch.name}')") do
                 File.write(file_path, updated)
-                git.add(rel_path)
+                working_copy.stage(rel_path)
               end
             end
           end
@@ -310,11 +323,8 @@ module Cimas
         sanity_check
 
         each_target_repo('diff') do |repo, repo_dir|
-          g = Git.open(repo_dir)
-
           puts "======================= DIFF FOR #{repo.name} ========================="
-          diff = g.diff
-          puts diff.patch
+          puts WorkingCopy.open(repo_dir).diff_patch
         end
       end
 
@@ -421,20 +431,9 @@ module Cimas
         sanity_check
 
         each_target_repo('pull') do |repo, repo_dir|
-          g = Git.open(repo_dir)
-
           dry_run("Pulling from #{repo.name}/#{repo.branch}...") do
             puts "Pulling from #{repo.name}/#{repo.branch}..."
-            g.remote("origin").fetch
-            begin
-              g.reset_hard(repo.branch)
-            rescue Git::Error
-              # reset can fail when the branch ref is absent on a fresh
-              # clone; checkout/pull below still applies.
-              nil
-            end
-            g.checkout(repo.branch)
-            g.pull("origin", repo.branch)
+            WorkingCopy.open(repo_dir).fetch_reset_pull(repo.branch)
           end
         end
 
@@ -486,7 +485,7 @@ module Cimas
 
         each_target_repo('push') do |repo, repo_dir|
           repo_name = repo.name
-          g = Git.open(repo_dir)
+          wc = WorkingCopy.open(repo_dir)
 
           # Skip repos with no drift. The historical "always push even
           # without changes" behavior was there to guarantee the wave
@@ -502,9 +501,7 @@ module Cimas
           # Assumes `cimas sync` has been run against this work-dir first,
           # so wd status reflects the drift state (matches the ordering
           # documented in README "End-to-end workflow").
-          has_local_drift = wd_has_drift?(repo_dir)
-
-          unless has_local_drift
+          unless wc.drift?
             skipped_no_op += 1
             msg = "Skipping no-op push to #{repo_name} (no drift)"
             puts config['dry_run'] ? "dry run: #{msg}" : msg
@@ -513,27 +510,18 @@ module Cimas
 
           drift_pushes += 1
 
-          dry_run("Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}") do
+          dry_run("Pushing branch #{push_to_branch} (commit #{wc.head_sha}) to #{wc.remote_name}:#{repo_name}") do
             puts "repo.branch #{repo.branch}" if verbose
 
-            unless keep_changes
-              g.checkout(repo.branch)
-              g.reset(repo.branch)
-              g.branch(push_to_branch).delete if g.is_branch?(push_to_branch)
-            end
-            g.branch(push_to_branch).checkout
-            g.add(repo.files.keys)
+            wc.reset_onto(repo.branch, discard_branch: push_to_branch) unless keep_changes
+            wc.switch_branch(push_to_branch)
+            wc.stage(*repo.files.keys)
 
-            if g.status.changed.empty? &&
-                g.status.added.empty? &&
-                g.status.deleted.empty?
-
-              if verbose
-                puts "Skipping commit on #{repo_name}, no changes detected."
-              end
+            if wc.clean?
+              puts "Skipping commit on #{repo_name}, no changes detected." if verbose
             else
               puts "Committing on #{repo_name}."
-              g.commit_all(commit_message)
+              wc.commit_all(commit_message)
             end
 
             # Still push even if there was no commit, as the remote branch
@@ -541,21 +529,16 @@ module Cimas
             # make PRs in the next stage. (Guard above ensures this branch
             # only runs when either the wd has drift OR the remote branch is
             # actually missing.)
-            begin
-              if force_push
-                puts "Force-pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}."
-                g.push(g.remotes.first, push_to_branch, force: true)
-              else
-                puts "Pushing branch #{push_to_branch} (commit #{g.object('HEAD').sha}) to #{g.remotes.first}:#{repo_name}."
-                g.push(g.remotes.first, push_to_branch)
-              end
-            rescue Git::GitExecuteError => ex
-              case ex.message
-              when /hint: Updates were rejected because the tip of your current branch is behind/
-                puts "[WARNING] branch #{push_to_branch} already exists on remote. If you wanna force push, pass --force"
-              else
-                puts "An error of type #{ex.class} happened, message is #{ex.message}"
-              end
+            action = force_push ? "Force-pushing" : "Pushing"
+            puts "#{action} branch #{push_to_branch} (commit #{wc.head_sha}) to #{wc.remote_name}:#{repo_name}."
+            outcome = wc.push(push_to_branch, force: force_push)
+            if outcome == :pushed
+              nil
+            elsif outcome == :behind_remote
+              puts "[WARNING] branch #{push_to_branch} already exists on remote. If you wanna force push, pass --force"
+            else
+              _status, error = outcome
+              puts "An error of type #{error.class} happened, message is #{error.message}"
             end
           end
         end
@@ -564,13 +547,6 @@ module Cimas
         puts "Push summary:"
         puts "  Pushed with drift: #{drift_pushes}"
         puts "  Skipped (no drift): #{skipped_no_op}"
-      end
-
-      def wd_has_drift?(repo_dir)
-        out, = Open3.capture3('git', '-C', repo_dir, 'status', '--porcelain')
-        !out.strip.empty?
-      rescue StandardError
-        false
       end
 
       # Label + comment (+ optionally close) a superseded prior-wave PR.
@@ -614,18 +590,6 @@ module Cimas
         end
       end
 
-      # Maps any GitHub remote form (ssh://git@github.com/org/repo,
-      # git@github.com:org/repo.git, https://github.com/org/repo.git) to
-      # the `org/repo` slug Octokit expects.
-      def git_remote_to_github_name(remote)
-        match = remote.to_s.match(%r{github\.com[/:](.+?)(?:\.git)?\z})
-        unless match
-          raise "[ERROR] not a GitHub remote: #{remote.inspect} — cimas only operates on GitHub repositories."
-        end
-
-        match[1]
-      end
-
       # For metanorma/ci#347 Option B: a `files:` value can be either the
       # legacy String (a single template path) or a Hash of the shape
       # `{ 'if_public' => path1, 'if_private' => path2 }`. In the Hash
@@ -645,63 +609,57 @@ module Cimas
         is_private ? source["if_private"] : source["if_public"]
       end
 
-      # Returns true if the repo is GitHub-private, false if public.
-      # Cached per invocation so a wave sync makes at most one call per
-      # repo. Falls back to `true` (safer default: no accidental public
-      # deploy) if the API is unreachable and there's no cached answer.
-      def repo_visibility_private?(repo)
-        @visibility_cache ||= {}
-        slug = git_remote_to_github_name(repo.remote)
-        return @visibility_cache[slug] if @visibility_cache.key?(slug)
+      # PR body from --body-file (preferred), --body inline, or the
+      # legacy "As title." placeholder. See metanorma/cimas#49 Bug 1: the
+      # previous open-prs unconditionally used `-m` as the title and a
+      # hard-coded body placeholder, so multi-line PR bodies were
+      # impossible — and passing a long markdown body via `-m` made it
+      # the title, triggering HTTP 422 "title is too long (max 256
+      # chars)" and aborting the whole open-prs loop. Force UTF-8 on the
+      # file read: locale-default (US-ASCII on some Ruby configs)
+      # mis-tags the string, and Octokit → Sawyer → JSON.dump then blows
+      # up on non-ASCII bytes (em dash, curly quotes) with `"\xE2" on
+      # US-ASCII`. PR bodies are markdown and routinely contain UTF-8;
+      # encoding-tagging at read time is the right place to fix it.
+      def resolve_pr_body
+        if config['pr_body_file'] && config['pr_body']
+          raise Cimas::Cli::Error, "--body and --body-file are mutually exclusive"
+        end
 
-        private_flag = fetch_repo_visibility(slug)
-        @visibility_cache[slug] = private_flag
+        if config['pr_body_file']
+          File.read(config['pr_body_file'], encoding: 'UTF-8')
+        elsif config['pr_body']
+          config['pr_body'].dup.force_encoding('UTF-8')
+        else
+          "As title. \n\n _Generated by Cimas_."
+        end
       end
 
-      def fetch_repo_visibility(slug)
-        github_client.repo(slug).private
-      rescue Octokit::NotFound
-        puts "[WARNING] Cannot fetch visibility for #{slug} (404); " \
-             "defaulting to `private` (safer)."
-        true
-      rescue StandardError => e
-        puts "[WARNING] Visibility fetch failed for #{slug}: " \
-             "#{e.message}; defaulting to `private` (safer)."
-        true
+      # GitHub rejects self-review requests with HTTP 422 "Review cannot
+      # be requested from pull request author." Pre-filter the token
+      # user out so the other reviewers still get requested (#7); when
+      # the token user can't be resolved, proceed as configured.
+      def reviewers_excluding_token_user(reviewers)
+        token_user = github_client.user.login
+        if reviewers.include?(token_user)
+          puts "[INFO] open-prs: excluding token user " \
+               "'#{token_user}' from reviewers (cannot self-review)"
+          reviewers.reject { |r| r == token_user }
+        else
+          reviewers
+        end
+      rescue Octokit::Error => e
+        puts "[WARNING] open-prs: could not resolve token user " \
+             "for self-review filter (#{e.message}); " \
+             "proceeding with reviewers as configured"
+        reviewers
       end
 
       def open_prs
         sanity_check
         branch = merge_branch
         message = pr_message
-        # Resolve PR body from --body-file (preferred), --body inline, or fall back
-        # to the legacy "As title." placeholder. See metanorma/cimas#49 Bug 1: the
-        # previous open-prs unconditionally used `-m` as the title and a hard-coded
-        # body placeholder, so multi-line PR bodies were impossible — and passing a
-        # long markdown body via `-m` made it the title, triggering HTTP 422
-        # "title is too long (max 256 chars)" and aborting the whole open-prs loop.
-        # exe/cimas populates `pr_body` / `pr_body_file` on the `options`
-        # hash; Command#initialize merges that into `@config`, so inside
-        # Command we access via `config['...']`. Prior code referenced
-        # `options` here, which is not a method on Command and raised
-        # NameError on the very first `open-prs` invocation before any PR
-        # could be created.
-        if config['pr_body_file'] && config['pr_body']
-          raise Cimas::Cli::Error, "--body and --body-file are mutually exclusive"
-        end
-        # Force UTF-8 on file read: locale-default (US-ASCII on some Ruby
-        # configs) mis-tags the string, and Octokit → Sawyer → JSON.dump
-        # then blows up on non-ASCII bytes (em dash, curly quotes, robot
-        # emoji) with `"\xE2" on US-ASCII`. PR bodies are markdown and
-        # routinely contain UTF-8; encoding-tagging at read time is the
-        # right place to fix it.
-        body = if config['pr_body_file']
-                 File.read(config['pr_body_file'], encoding: 'UTF-8')
-               elsif config['pr_body']
-                 config['pr_body'].dup.force_encoding('UTF-8')
-               else
-                 "As title. \n\n _Generated by Cimas_."
-               end
+        body = resolve_pr_body
         # Coerce to an Array of handles via string_list: accepts an Array
         # from cimas.yml settings or a (possibly comma-separated) String
         # from the `-a` / `-w` CLI flags. Without coercion, `-a opoudjis`
@@ -709,35 +667,15 @@ module Cimas
         # down crashed with NoMethodError, aborting `cimas open-prs`
         # before any PR could be created.
         assignees = string_list(config['assignees'])
-        reviewers = string_list(config['reviewers'])
-
-        # GitHub rejects self-review requests with HTTP 422
-        # "Review cannot be requested from pull request author."
-        # The rescue path below in the request-review block previously caught
-        # this and skipped the entire request, dropping the OTHER valid
-        # reviewers as a side-effect. Pre-filter the token user out so the
-        # remaining reviewers still get requested. (#7)
-        begin
-          token_user = github_client.user.login
-          if reviewers.include?(token_user)
-            puts "[INFO] open-prs: excluding token user " \
-                 "'#{token_user}' from reviewers (cannot self-review)"
-            reviewers = reviewers.reject { |r| r == token_user }
-          end
-        rescue Octokit::Error => e
-          puts "[WARNING] open-prs: could not resolve token user " \
-               "for self-review filter (#{e.message}); " \
-               "proceeding with reviewers as configured"
-        end
+        reviewers = reviewers_excluding_token_user(string_list(config['reviewers']))
 
         cooldown_count = config['cooldown_count']
         cooldown_time = config['cooldown_time']
 
         cooldown_counter = 0
 
-        each_target_repo('open-prs') do |repo, repo_dir|
+        each_target_repo('open-prs') do |repo, _repo_dir|
           repo_name = repo.name
-          g = Git.open(repo_dir)
           github_slug = git_remote_to_github_name(repo.remote)
 
           # --supersede-stale: detect prior open cimas-sync-* PRs on this repo.
@@ -1014,12 +952,8 @@ module Cimas
 
         each_target_repo('cleanup-orphan-files') do |repo, repo_dir|
           repo_name = repo.name
-          g = Git.open(repo_dir)
-          unless keep_changes
-            g.checkout(repo.branch)
-            g.reset_hard(repo.branch)
-            g.clean(force: true, d: true)
-          end
+          wc = WorkingCopy.open(repo_dir)
+          wc.reset_clean(repo.branch, include_untracked: true) unless keep_changes
 
           mapped_targets = (repo.files || {}).keys.to_set
           orphans = Cimas::OrphanFiles.find(repo_dir, mapped_targets, only_targets)
@@ -1034,15 +968,13 @@ module Cimas
 
           if push_after
             dry_run("Commit + push deletion of #{orphans.size} orphan(s) in #{repo_name} on #{branch}") do
-              g.branch(branch).delete if g.is_branch?(branch)
-              g.branch(branch).checkout
-              orphans.each { |o| g.remove(o) }
-              g.commit(message)
-              begin
-                g.push('origin', branch, force: true)
+              wc.switch_branch(branch, fresh: true)
+              wc.remove(*orphans)
+              wc.commit(message)
+              if wc.push(branch, force: true) == :pushed
                 puts "[pushed] #{repo_name}:#{branch}"
-              rescue Git::FailedError => e
-                puts "[ERROR] #{repo_name}:#{branch} push failed: #{e.message}"
+              else
+                puts "[ERROR] #{repo_name}:#{branch} push failed"
               end
             end
           else
@@ -1050,117 +982,14 @@ module Cimas
             # inspect and push manually. Useful for a review-before-blast
             # workflow.
             dry_run("Stage deletion of #{orphans.size} orphan(s) in #{repo_name} (local only, no push)") do
-              orphans.each { |o| g.remove(o) }
+              wc.remove(*orphans)
             end
           end
         end
       end
 
-      # Local maintainer-side preflight that mirrors the GHA preflight job in
-      # `metanorma/ci/.github/workflows/rubygems-release.yml`. Runs against a
-      # single repo's workspace clone before the maintainer fires the
-      # `workflow_dispatch` to actually start the release chain. Catches the
-      # cheap, deterministic failure modes (bundle resolve, gemspec errors,
-      # missing credentials, already-published version) in ~30 sec locally,
-      # so the maintainer never commits to the 2+ hour chain on a release
-      # that was going to fail.
-      #
-      # Companion to the GHA-side preflight introduced in metanorma/ci PR #313.
-      # Both protect against the same class of failures; the GHA preflight
-      # protects every release attempt automatically, this one protects the
-      # maintainer who runs it before firing.
       def release_preflight
-        repo_name = config['target_repo']
-
-        repo = repo_by_name(repo_name)
-        if repo.nil?
-          raise "[ERROR] #{repo_name} is not in cimas.yml. Run with --config-path pointing at the correct config."
-        end
-
-        repo_dir = File.join(repos_path, repo_name)
-        unless File.exist?(repo_dir) && File.exist?(File.join(repo_dir, '.git'))
-          raise "[ERROR] #{repo_name} is not present in #{repos_path}. Run `cimas setup` first."
-        end
-
-        puts "=== cimas release-preflight: #{repo_name} ==="
-        puts "    workspace: #{repo_dir}"
-        puts ""
-
-        failures = []
-
-        Dir.chdir(repo_dir) do
-          puts "[1/4] Fresh bundle install (Gemfile.lock removed first)..."
-          File.delete('Gemfile.lock') if File.exist?('Gemfile.lock')
-          unless system('bundle install --jobs 4 --retry 3')
-            failures << 'bundle install'
-            puts "    ✗ bundle install failed"
-          else
-            puts "    ✓ bundle install succeeded"
-          end
-          puts ""
-
-          puts "[2/4] Gem build (validates gemspec)..."
-          gemspec_file = Dir['*.gemspec'].first
-          if gemspec_file.nil?
-            puts "    ⚠️  No .gemspec file found in repo root; skipping gem build check"
-          else
-            if system("gem build #{gemspec_file}")
-              puts "    ✓ gem build succeeded"
-              Dir['*.gem'].each { |f| File.delete(f) }
-            else
-              failures << 'gem build'
-              puts "    ✗ gem build failed"
-            end
-          end
-          puts ""
-
-          puts "[3/4] Verify publish credentials available..."
-          creds_path = File.expand_path('~/.gem/credentials')
-          if File.exist?(creds_path)
-            puts "    ✓ ~/.gem/credentials present (API-key publish path viable)"
-          elsif ENV['RUBYGEMS_API_KEY'] && !ENV['RUBYGEMS_API_KEY'].empty?
-            puts "    ✓ RUBYGEMS_API_KEY env var present"
-          else
-            puts "    ⚠️  No ~/.gem/credentials and no RUBYGEMS_API_KEY env var."
-            puts "        OIDC Trusted Publishing may still work in CI, but local `gem push` will fail."
-            puts "        Configure ~/.gem/credentials if you intend to publish from this machine."
-          end
-          puts ""
-
-          puts "[4/4] Version awareness..."
-          gem_spec = gemspec_file ? Gem::Specification.load(gemspec_file) : nil
-          if gem_spec
-            gem_name = gem_spec.name
-            gem_version = gem_spec.version.to_s
-            remote_list = `gem list --remote --exact --version "#{gem_version}" "#{gem_name}" 2>/dev/null`
-            if remote_list.include?("#{gem_name} (#{gem_version})")
-              puts "    ℹ️  #{gem_name} #{gem_version} is already on rubygems.org"
-              puts "        With next_version=skip, the idempotent guard will skip the actual gem push."
-              puts "        If you intended to ship NEW code, fire with next_version=patch (or major/minor)."
-            else
-              puts "    ✓ #{gem_name} #{gem_version} is NOT yet on rubygems — clean to publish"
-              latest_list = `gem list --remote --exact "#{gem_name}" 2>/dev/null`
-              if latest_match = latest_list.match(/#{Regexp.escape(gem_name)} \(([0-9.]+)/)
-                puts "        Latest published: #{gem_name} #{latest_match[1]}"
-              else
-                puts "        (No previous public version found.)"
-              end
-            end
-          else
-            puts "    (skipped — no gemspec to identify)"
-          end
-          puts ""
-        end
-
-        puts "=== Result ==="
-        if failures.empty?
-          puts "✓ All preflight checks passed for #{repo_name}."
-          puts "  Safe to fire: gh workflow run release.yml --repo metanorma/#{repo_name} --field next_version=patch"
-        else
-          puts "✗ Preflight FAILED for #{repo_name}: #{failures.join(', ')}"
-          puts "  Do NOT fire the release workflow until the failures above are fixed."
-          exit 1
-        end
+        Cimas::ReleasePreflight.new(self).run
       end
 
       def for_each

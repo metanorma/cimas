@@ -17,6 +17,9 @@ module Cimas
   autoload :Repository, File.expand_path("cimas/repository", __dir__)
   autoload :Patch, File.expand_path("cimas/patch", __dir__)
   autoload :OrphanFiles, File.expand_path("cimas/orphan_files", __dir__)
+  autoload :WorkingCopy, File.expand_path("cimas/working_copy", __dir__)
+  autoload :GitHub, File.expand_path("cimas/github", __dir__)
+  autoload :ReleasePreflight, File.expand_path("cimas/release_preflight", __dir__)
   autoload :Cli, File.expand_path("cimas/cli", __dir__)
 
   def self.root

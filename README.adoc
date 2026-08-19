@@ -124,6 +124,10 @@ Cimas works through the `cimas` executable. `cimas` provides the following sub-c
 * `pull`
 * `open-prs`
 * `for-each`
+* `cleanup-merged-prs`
+* `cleanup-closed-prs`
+* `cleanup-orphan-files`
+* `release-preflight`
 
 
 ==== Global options

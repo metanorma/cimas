@@ -1,6 +1,15 @@
 require "spec_helper"
 
 RSpec.describe Cimas::Cli::Runner do
+  describe "registry invariants" do
+    it "registers exactly the COMMANDS registry as Thor tasks" do
+      runner_commands = described_class.tasks.keys - %w[help]
+
+      expect(runner_commands.map { |c| c.tr("_", "-") }.sort)
+        .to eq(Cimas::Cli::Command::COMMANDS.keys.sort)
+    end
+  end
+
   describe "#command_options" do
     def options_for(extra = {})
       defaults = { config_path: "spec/fixtures/sample.yml" }
