@@ -50,7 +50,7 @@ Domain models and seams, each loaded via autoload with `__dir__`-absolute paths 
 ### Conventions
 
 - Log lines carry severity prefixes (`[ERROR]`, `[WARNING]`, `[INFO]`); `sanity_check` is advisory — it warns and continues.
-- Specs build real temp-dir working areas, real `Command` objects, real `Git.init`/local-bare-remotes (no doubles, no network); `exe_spec` boots the real executable with `RUBYOPT` cleared (installed-gem execution model). `spec/cimas/wave_lifecycle_spec.rb` is the end-to-end money path (sync → diff → push against a local bare remote); when touching git-touching code, run it first.
+- Specs build real temp-dir working areas, real `Command` objects, real `Git.init`/local-bare-remotes (no doubles, no network); `exe_spec` boots the real executable with `RUBYOPT` cleared (installed-gem execution model). GitHub-backed commands inject `config['github'] = Cimas::GitHub.new(client: FakeGitHubClient.new)` (`spec/support/`, never `double()`); release-preflight injects `config['release_preflight_runner']`. `spec/cimas/wave_lifecycle_spec.rb` is the end-to-end money path (sync → diff → push against a local bare remote); when touching git-touching code, run it first.
 - `plans/` holds dated sync-wave planning notes; consult the newest file for in-flight wave context.
 - `TODO*` files are local working notes — git-ignored, never commit them.
 - README.adoc is the authoritative user documentation and includes a "Gotchas summary" table; update it when adding subcommand flags or behavior changes.

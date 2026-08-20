@@ -12,13 +12,36 @@ module Cimas
   # Both protect against the same class of failures; the GHA preflight
   # protects every release attempt automatically, this one protects the
   # maintainer who runs it before firing.
+  #
+  # `runner:` injects the process boundary for offline specs (production
+  # omits it and uses the default shell runner).
   class ReleasePreflight
-    def initialize(command)
+    # Default process boundary: real shell + filesystem credential check.
+    class ShellRunner
+      def system!(*args)
+        system(*args)
+      end
+
+      def capture(cmd)
+        `#{cmd}`
+      end
+
+      def credentials_present?
+        File.exist?(File.expand_path("~/.gem/credentials"))
+      end
+
+      def api_key_present?
+        ENV["RUBYGEMS_API_KEY"] && !ENV["RUBYGEMS_API_KEY"].empty?
+      end
+    end
+
+    def initialize(command, runner: nil)
       @command = command
+      @runner = runner || ShellRunner.new
     end
 
     def run
-      repo_name = @command.config['target_repo']
+      repo_name = @command.config["target_repo"]
 
       repo = @command.repo_by_name(repo_name)
       if repo.nil?
@@ -26,7 +49,7 @@ module Cimas
       end
 
       repo_dir = File.join(@command.repos_path, repo_name)
-      unless File.exist?(repo_dir) && File.exist?(File.join(repo_dir, '.git'))
+      unless File.exist?(repo_dir) && File.exist?(File.join(repo_dir, ".git"))
         raise "[ERROR] #{repo_name} is not present in #{@command.repos_path}. Run `cimas setup` first."
       end
 
@@ -38,9 +61,9 @@ module Cimas
 
       Dir.chdir(repo_dir) do
         puts "[1/4] Fresh bundle install (Gemfile.lock removed first)..."
-        File.delete('Gemfile.lock') if File.exist?('Gemfile.lock')
-        unless system('bundle install --jobs 4 --retry 3')
-          failures << 'bundle install'
+        File.delete("Gemfile.lock") if File.exist?("Gemfile.lock")
+        unless @runner.system!("bundle install --jobs 4 --retry 3")
+          failures << "bundle install"
           puts "    ✗ bundle install failed"
         else
           puts "    ✓ bundle install succeeded"
@@ -48,25 +71,24 @@ module Cimas
         puts ""
 
         puts "[2/4] Gem build (validates gemspec)..."
-        gemspec_file = Dir['*.gemspec'].first
+        gemspec_file = Dir["*.gemspec"].first
         if gemspec_file.nil?
           puts "    ⚠️  No .gemspec file found in repo root; skipping gem build check"
         else
-          if system("gem build #{gemspec_file}")
+          if @runner.system!("gem build #{gemspec_file}")
             puts "    ✓ gem build succeeded"
-            Dir['*.gem'].each { |f| File.delete(f) }
+            Dir["*.gem"].each { |f| File.delete(f) }
           else
-            failures << 'gem build'
+            failures << "gem build"
             puts "    ✗ gem build failed"
           end
         end
         puts ""
 
         puts "[3/4] Verify publish credentials available..."
-        creds_path = File.expand_path('~/.gem/credentials')
-        if File.exist?(creds_path)
+        if @runner.credentials_present?
           puts "    ✓ ~/.gem/credentials present (API-key publish path viable)"
-        elsif ENV['RUBYGEMS_API_KEY'] && !ENV['RUBYGEMS_API_KEY'].empty?
+        elsif @runner.api_key_present?
           puts "    ✓ RUBYGEMS_API_KEY env var present"
         else
           puts "    ⚠️  No ~/.gem/credentials and no RUBYGEMS_API_KEY env var."
@@ -80,14 +102,18 @@ module Cimas
         if gem_spec
           gem_name = gem_spec.name
           gem_version = gem_spec.version.to_s
-          remote_list = `gem list --remote --exact --version "#{gem_version}" "#{gem_name}" 2>/dev/null`
+          remote_list = @runner.capture(
+            "gem list --remote --exact --version \"#{gem_version}\" \"#{gem_name}\" 2>/dev/null",
+          )
           if remote_list.include?("#{gem_name} (#{gem_version})")
             puts "    ℹ️  #{gem_name} #{gem_version} is already on rubygems.org"
             puts "        With next_version=skip, the idempotent guard will skip the actual gem push."
             puts "        If you intended to ship NEW code, fire with next_version=patch (or major/minor)."
           else
             puts "    ✓ #{gem_name} #{gem_version} is NOT yet on rubygems — clean to publish"
-            latest_list = `gem list --remote --exact "#{gem_name}" 2>/dev/null`
+            latest_list = @runner.capture(
+              "gem list --remote --exact \"#{gem_name}\" 2>/dev/null",
+            )
             if latest_match = latest_list.match(/#{Regexp.escape(gem_name)} \(([0-9.]+)/)
               puts "        Latest published: #{gem_name} #{latest_match[1]}"
             else

@@ -3,17 +3,21 @@ require "octokit"
 module Cimas
   # Octokit boundary: client construction, remote-to-slug mapping, and
   # the visibility-lookup fallback policy live here; the orchestrator
-  # speaks in slugs.
+  # speaks in slugs. Pass `client:` to inject a stand-in for offline
+  # specs (production code always omits it).
   class GitHub
-    def initialize(token: nil)
+    def initialize(token: nil, client: nil)
       @token = token
+      @client = client
     end
 
     def client
+      return @client if @client
+
       if @token.nil?
         raise "[ERROR] Please set GITHUB_TOKEN environment variable to use GitHub functions."
       end
-      @client ||= Octokit::Client.new(access_token: @token)
+      @client = Octokit::Client.new(access_token: @token)
     end
 
     # Maps any GitHub remote form (ssh://git@github.com/org/repo,
