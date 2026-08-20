@@ -145,8 +145,10 @@ module Cimas
       # Octokit boundary lives in Cimas::GitHub; these delegators keep
       # the orchestrator's vocabulary (slug from remote, cached
       # visibility per repository).
+      # Inject a stand-in via config['github'] for offline specs;
+      # production always builds a real Cimas::GitHub.
       def github
-        @github ||= Cimas::GitHub.new(token: config['github_token'])
+        @github ||= config['github'] || Cimas::GitHub.new(token: config['github_token'])
       end
 
       def github_client
@@ -989,7 +991,7 @@ module Cimas
       end
 
       def release_preflight
-        Cimas::ReleasePreflight.new(self).run
+        Cimas::ReleasePreflight.new(self, runner: config["release_preflight_runner"]).run
       end
 
       def for_each
